@@ -13,6 +13,7 @@ type BuiltInContextSurfaceId =
   | 'walkthrough'
   | 'terminal'
   | 'notes'
+  | 'voice'
   | 'context'
   | 'browser'
   | 'workflows'
@@ -115,6 +116,14 @@ export const CONTEXT_SURFACES: readonly ContextSurfaceDescriptor[] = [
     availability: 'always',
   },
   {
+    id: 'voice',
+    descriptionKey: 'liveVoice.description',
+    mode: 'voice',
+    icon: 'mic',
+    labelKey: 'liveVoice.title',
+    availability: 'always',
+  },
+  {
     id: 'workflows',
     descriptionKey: 'contextRail.surface.workflows.description',
     mode: 'workflows',
@@ -153,6 +162,7 @@ const BUILT_IN_SURFACE_GROUPS = {
   terminal: 'tools',
   browser: 'tools',
   notes: 'workspace',
+  voice: 'workspace',
   workflows: 'workspace',
   chat: 'workspace',
 } satisfies Record<BuiltInContextSurfaceId, ContextSurfaceGroup>;
