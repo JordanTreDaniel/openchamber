@@ -6,7 +6,13 @@
  * so the client and the panel stay free of protocol trivia and the shaping
  * rules can be tested without a peer connection. The behaviour these numbers
  * buy is described in `DOCUMENTATION.md` beside this file.
+ *
+ * Inbound frames are decoded here, at the boundary: `parseInboundEvent` runs
+ * a schema over the raw frame, so nothing downstream narrows a value it has
+ * not parsed.
  */
+
+import { z } from 'zod';
 
 /** Must equal `gpt-live` or start with `gpt-live-`. */
 export const VOICE_MODEL = 'gpt-live-1';
@@ -30,7 +36,7 @@ export const DEFAULT_VOICE = 'marin';
 export const INBOUND = {
   /** Carries `expires_at`; the session is live from here. */
   STARTED: 'session.started',
-  /** Carries `reason`; see `CloseReason`. */
+  /** Carries `reason`; any string ends the session — see `CloseReason`. */
   CLOSED: 'session.closed',
   /** Carries a delegation id and NO task text — the task is reconstructed. */
   DELEGATION_CREATED: 'session.delegation.created',
@@ -53,8 +59,16 @@ export const OUTBOUND = {
 
 export type OutboundType = (typeof OUTBOUND)[keyof typeof OUTBOUND];
 
-/** Why a session ended, as the protocol reports it. */
-export type CloseReason = 'close_requested' | 'expired' | 'content' | 'remote_hangup' | 'connection_lost';
+/**
+ * Why a session ended, as the protocol documents it. The wire may carry a
+ * reason this list does not know yet, so the parser accepts any string: an
+ * unrecognised reason must still end the session rather than dropping the
+ * event that says so.
+ */
+type CloseReason = 'close_requested' | 'expired' | 'content' | 'remote_hangup' | 'connection_lost';
+
+/** The reason assumed when the far side closes without naming one. */
+export const DEFAULT_CLOSE_REASON: CloseReason = 'close_requested';
 
 /**
  * Hard protocol limits and our own pacing.
@@ -112,67 +126,122 @@ export const DEFAULT_INSTRUCTIONS = [
 // Inbound events
 // ---------------------------------------------------------------------------
 
-export type DelegationCreatedEvent = {
+// The event payloads as the protocol sends them. Each has a schema below, and
+// `parseInboundEvent` decodes against those schemas: these types describe what
+// has already been checked, never what an assertion claimed.
+
+type DelegationCreatedEvent = {
   type: typeof INBOUND.DELEGATION_CREATED;
   offset_ms?: number;
   delegation?: { id?: string; type?: string };
 };
 
-export type TranscriptDeltaEvent = {
+type TranscriptDeltaEvent = {
   type: typeof INBOUND.INPUT_TRANSCRIPT | typeof INBOUND.OUTPUT_TRANSCRIPT;
   delta?: string;
   start_ms?: number;
   end_ms?: number;
 };
 
-export type SessionStartedEvent = {
+type SessionStartedEvent = {
   type: typeof INBOUND.STARTED;
   expires_at?: number;
 };
 
-export type SessionClosedEvent = {
+type SessionClosedEvent = {
   type: typeof INBOUND.CLOSED;
-  reason?: CloseReason;
+  /** Any string, not only `CloseReason`: see the schema below. */
+  reason?: string;
 };
 
-export type ProtocolErrorEvent = {
+type ProtocolErrorEvent = {
   type: typeof INBOUND.ERROR;
   error?: { code?: string; message?: string; param?: string };
 };
 
-export type VoiceInboundEvent =
+type VoiceInboundEvent =
   | DelegationCreatedEvent
   | TranscriptDeltaEvent
   | SessionStartedEvent
   | SessionClosedEvent
   | ProtocolErrorEvent;
 
-const INBOUND_TYPES = new Set<string>([
-  INBOUND.STARTED,
-  INBOUND.CLOSED,
-  INBOUND.DELEGATION_CREATED,
-  INBOUND.INPUT_TRANSCRIPT,
-  INBOUND.OUTPUT_TRANSCRIPT,
-  INBOUND.ERROR,
+const sessionStartedEventSchema = z.object({
+  type: z.literal(INBOUND.STARTED),
+  expires_at: z.number().optional(),
+});
+
+/**
+ * `reason` is a plain string on purpose. The protocol is additive, so a
+ * reason this client has never heard of must still end the session — enum
+ * validation here would swallow `session.closed` and leave the microphone
+ * open on a session the far side has already closed.
+ */
+const sessionClosedEventSchema = z.object({
+  type: z.literal(INBOUND.CLOSED),
+  reason: z.string().optional(),
+});
+
+const delegationCreatedEventSchema = z.object({
+  type: z.literal(INBOUND.DELEGATION_CREATED),
+  offset_ms: z.number().optional(),
+  delegation: z.object({ id: z.string().optional(), type: z.string().optional() }).optional(),
+});
+
+const transcriptDeltaEventSchema = z.object({
+  type: z.union([z.literal(INBOUND.INPUT_TRANSCRIPT), z.literal(INBOUND.OUTPUT_TRANSCRIPT)]),
+  delta: z.string().optional(),
+  start_ms: z.number().optional(),
+  end_ms: z.number().optional(),
+});
+
+const protocolErrorEventSchema = z.object({
+  type: z.literal(INBOUND.ERROR),
+  error: z.object({
+    code: z.string().optional(),
+    message: z.string().optional(),
+    param: z.string().optional(),
+  }).optional(),
+});
+
+/**
+ * Every frame this client acts on. A frame of any other shape — an unknown
+ * type, a wrong field, a value of the wrong kind — fails the union and is
+ * dropped, which is what makes the protocol additive without being unsafe.
+ */
+const inboundEventSchema: z.ZodType<VoiceInboundEvent> = z.union([
+  sessionStartedEventSchema,
+  sessionClosedEventSchema,
+  delegationCreatedEventSchema,
+  transcriptDeltaEventSchema,
+  protocolErrorEventSchema,
 ]);
+
+/**
+ * A frame as `RTCDataChannel.onmessage` hands it over. The channel carries
+ * text, so the protocol arrives as a string; a null frame carries no data and
+ * a binary frame is not the protocol. The parser drops everything it cannot
+ * decode, whatever the transport delivered.
+ */
+export type InboundFrame = string | ArrayBuffer | Blob | null;
 
 /**
  * Parse one data-channel frame. A frame we cannot read, or one of a type this
  * client does not act on, is `null`: the protocol is additive, and an unknown
- * type is not a failure.
+ * type is not a failure. The schema is the only thing that decides what the
+ * rest of the client is allowed to see.
  */
-export const parseInboundEvent = (raw: unknown): VoiceInboundEvent | null => {
-  if (typeof raw !== 'string' || raw.length === 0) return null;
-  let parsed: unknown;
+export const parseInboundEvent = (frame: InboundFrame): VoiceInboundEvent | null => {
+  const text = z.string().safeParse(frame);
+  if (!text.success) return null;
+  let decoded: unknown;
   try {
-    parsed = JSON.parse(raw);
+    decoded = JSON.parse(text.data);
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const candidate = parsed as { type?: unknown };
-  if (typeof candidate.type !== 'string' || !INBOUND_TYPES.has(candidate.type)) return null;
-  return parsed as VoiceInboundEvent;
+  const event = inboundEventSchema.safeParse(decoded);
+  return event.success ? event.data : null;
 };
 
 /** One line for the panel, from an `error` event or a failed mint. */
@@ -200,7 +269,7 @@ export const encodeAppend = (payload: AppendPayload): string => JSON.stringify(p
 
 const encoder = new TextEncoder();
 
-export const byteLength = (text: string): number => encoder.encode(text).length;
+const byteLength = (text: string): number => encoder.encode(text).length;
 
 /**
  * Byte-aware chunker: never splits a multi-byte character, and always makes
@@ -310,11 +379,11 @@ export const appendInputTurn = (
   startMs?: number,
   endMs?: number,
 ): InputTurn[] => {
-  if (!delta) return turns as InputTurn[];
+  if (!delta) return [...turns];
   const current = turns[turns.length - 1];
   // Without timestamps on both sides there is no evidence of a gap, so the
   // delta continues the turn we are in rather than starting one per fragment.
-  const gap = current && typeof startMs === 'number' && typeof current.endMs === 'number'
+  const gap = current && startMs !== undefined && current.endMs !== undefined
     ? startMs - current.endMs
     : current
       ? 0
@@ -323,18 +392,21 @@ export const appendInputTurn = (
     return [...turns, { text: delta, startMs, endMs }];
   }
   const merged: InputTurn = { ...current, text: current.text + delta };
-  if (typeof endMs === 'number') merged.endMs = endMs;
+  if (endMs !== undefined) merged.endMs = endMs;
   return [...turns.slice(0, -1), merged];
 };
 
 /** The last turn long enough to be an instruction rather than a noise word. */
-export const lastSubstantialTurn = (turns: readonly InputTurn[]): string => {
+const lastSubstantialTurn = (turns: readonly InputTurn[]): string => {
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     const text = turns[index]?.text.trim() ?? '';
     if (text.length >= 3) return text;
   }
   return '';
 };
+
+/** What a delegation's task is, and where the transcript was read up to. */
+type ReconstructedTask = { task: string; nextCursor: number };
 
 /**
  * The task for a delegation, rebuilt from what has been heard since the last
@@ -343,7 +415,7 @@ export const lastSubstantialTurn = (turns: readonly InputTurn[]): string => {
 export const reconstructTask = (
   turns: readonly InputTurn[],
   delegatedUpTo: number,
-): { task: string; nextCursor: number } => {
+): ReconstructedTask => {
   const pending = turns.slice(delegatedUpTo);
   const task = pending.map((turn) => turn.text.trim()).filter(Boolean).join(' ').trim();
   return {

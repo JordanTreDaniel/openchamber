@@ -39,7 +39,7 @@ export type TranscriptEntry = {
 };
 
 /** A question the agent is blocked on, until someone answers it in the chat. */
-export type PendingQuestion = {
+type PendingQuestion = {
   sessionId: string;
   formId: string;
   title: string;
@@ -95,14 +95,24 @@ const nextEntryId = (): string => {
   return `lv-${Date.now().toString(36)}-${entrySeq}`;
 };
 
-const initialSessionState = {
-  status: 'idle' as LiveVoiceStatus,
+/**
+ * What `resetSession` restores: everything a session owns, and nothing the
+ * user picked. Typing the literal here is what lets the reset values be plain
+ * values — `status: 'idle'`, not `status: 'idle' as LiveVoiceStatus`.
+ */
+type SessionResetState = Pick<
+  LiveVoiceState,
+  'status' | 'running' | 'expiresAt' | 'error' | 'transcript' | 'pendingQuestion' | 'lastTask'
+>;
+
+const initialSessionState: SessionResetState = {
+  status: 'idle',
   running: false,
-  expiresAt: null as number | null,
-  error: null as string | null,
-  transcript: [] as TranscriptEntry[],
-  pendingQuestion: null as PendingQuestion | null,
-  lastTask: null as string | null,
+  expiresAt: null,
+  error: null,
+  transcript: [],
+  pendingQuestion: null,
+  lastTask: null,
 };
 
 export const useLiveVoiceStore = create<LiveVoiceState>()((set) => ({

@@ -57,6 +57,10 @@ second WebSocket, no raw prompt proxy, no local text-to-speech.
 - **The panel binds to an existing session.** Voice work runs in the session the
   chat is showing; the panel never creates a session, because one created
   without a working directory runs in `$HOME` and deadlocks.
+- **Inbound frames are parsed, never narrowed.** `parseInboundEvent` decodes the
+  raw data-channel frame against a schema at the boundary, and the mint response
+  is parsed the same way; nothing downstream branches on a runtime `typeof` or
+  asserts a shape it did not check.
 
 ## Decisions
 

@@ -27,7 +27,7 @@ import { filterVisibleAgents, useAgentsStore } from '@/stores/useAgentsStore';
  */
 
 /** One dot per state, in the app's status colours; only state, never decoration. */
-const STATUS_TONE: Record<LiveVoiceStatus, { dot: string; label: I18nKey }> = {
+const STATUS_TONE = {
   idle: { dot: 'bg-muted-foreground/40', label: 'liveVoice.status.idle' },
   connecting: { dot: 'bg-status-info/60', label: 'liveVoice.status.connecting' },
   listening: { dot: 'bg-status-success', label: 'liveVoice.status.listening' },
@@ -35,7 +35,7 @@ const STATUS_TONE: Record<LiveVoiceStatus, { dot: string; label: I18nKey }> = {
   working: { dot: 'bg-status-info', label: 'liveVoice.status.working' },
   ended: { dot: 'bg-muted-foreground/40', label: 'liveVoice.status.ended' },
   error: { dot: 'bg-status-error', label: 'liveVoice.status.error' },
-};
+} as const satisfies Record<LiveVoiceStatus, { dot: string; label: I18nKey }>;
 
 /**
  * Only `marin` is verified against `gpt-live`; the rest are the realtime
@@ -44,14 +44,14 @@ const STATUS_TONE: Record<LiveVoiceStatus, { dot: string; label: I18nKey }> = {
  */
 const VOICES = [DEFAULT_VOICE, 'alloy', 'shimmer', 'echo', 'coral', 'verse'] as const;
 
-const TRANSCRIPT_LABEL: Record<TranscriptEntry['kind'], I18nKey | null> = {
+const TRANSCRIPT_LABEL = {
   you: 'liveVoice.transcript.you',
   voice: 'liveVoice.transcript.voice',
   agent: 'liveVoice.transcript.agent',
   spoken: 'liveVoice.transcript.spoken',
   marker: null,
   error: null,
-};
+} as const satisfies Record<TranscriptEntry['kind'], I18nKey | null>;
 
 const useSessionTitle = (sessionId: string | null): string | null => {
   const sessions = useGlobalSessionsStore((state) => state.activeSessions);

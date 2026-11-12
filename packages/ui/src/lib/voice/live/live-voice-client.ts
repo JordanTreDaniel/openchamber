@@ -24,6 +24,7 @@
  */
 
 import type { StoreApi } from 'zustand';
+import { z } from 'zod';
 
 import { flattenAssistantTextParts } from '@/lib/messages/messageText';
 import type { DirectoryStore } from '@/sync/child-store';
@@ -39,6 +40,7 @@ import { useContextStore } from '@/stores/contextStore';
 import { useLiveVoiceStore, type VoiceBinding } from './live-voice-store';
 import {
   DATA_CHANNEL,
+  DEFAULT_CLOSE_REASON,
   DEFAULT_INSTRUCTIONS,
   DEFAULT_VOICE,
   INBOUND,
@@ -59,6 +61,7 @@ import {
   reconstructTask,
   tailForAppend,
   type AppendPayload,
+  type InboundFrame,
   type InputTurn,
   type OutboundType,
 } from './realtime-protocol';
@@ -96,12 +99,27 @@ type AppendJob = AppendPayload;
 /** One open transcript row per speaker, so deltas extend instead of stacking. */
 type OpenLine = { id: string; endMs: number | null };
 
+/** Both speaker rows: each is open (id and last timestamp) or closed. */
+type OpenLines = { you: OpenLine | null; voice: OpenLine | null };
+
 type TeardownOptions = {
   /** Shown in the panel and stops the run; omit for a user-requested stop. */
   error?: string;
   /** Protocol reason, when the far side closed the session. */
   reason?: string;
 };
+
+/**
+ * What our own mint endpoint returns: an SDP answer under `data.transport` on
+ * success, a message or error string on refusal. Parsed rather than asserted,
+ * so a body of any other shape degrades to the HTTP status in the panel
+ * instead of pretending to hold an answer.
+ */
+const mintResponseSchema = z.object({
+  data: z.object({ transport: z.object({ sdp: z.string().optional() }).optional() }).optional(),
+  message: z.string().optional(),
+  error: z.string().optional(),
+});
 
 const HARD_JOB_TIMEOUT_MS = 5 * 60 * 1000;
 /** How long a prompt response may take before the job is called a failure. */
@@ -132,7 +150,7 @@ class LiveVoiceClient {
   private outboundTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSentKey = '';
 
-  private openLines: Record<'you' | 'voice', OpenLine | null> = { you: null, voice: null };
+  private openLines: OpenLines = { you: null, voice: null };
   private statusUnsubscribers: Array<() => void> = [];
 
   private readonly store = useLiveVoiceStore;
@@ -266,9 +284,9 @@ class LiveVoiceClient {
         }),
       });
 
-      const payload = await response.json().catch(() => null) as
-        | { data?: { transport?: { sdp?: string } }; message?: string; error?: string }
-        | null;
+      const body: unknown = await response.json().catch(() => null);
+      const parsed = mintResponseSchema.safeParse(body);
+      const payload = parsed.success ? parsed.data : null;
 
       if (!response.ok) {
         const detail = payload?.message || payload?.error || `HTTP ${response.status}`;
@@ -456,21 +474,21 @@ class LiveVoiceClient {
 
   // -- inbound --------------------------------------------------------------
 
-  private handleInbound(raw: unknown): void {
-    const event = parseInboundEvent(raw);
+  private handleInbound(frame: InboundFrame): void {
+    const event = parseInboundEvent(frame);
     if (!event) return;
     const store = this.store.getState();
 
     switch (event.type) {
       case INBOUND.STARTED: {
-        if (typeof event.expires_at === 'number') store.setExpiresAt(event.expires_at);
+        if (event.expires_at !== undefined) store.setExpiresAt(event.expires_at);
         if (this.dc?.readyState === 'open') store.setStatus('listening');
         store.appendTranscript('marker', 'Voice session live.');
         return;
       }
 
       case INBOUND.CLOSED: {
-        const reason = event.reason ?? 'close_requested';
+        const reason = event.reason ?? DEFAULT_CLOSE_REASON;
         // The far side owns the exit; teardown still owns the microphone.
         this.teardown({ reason });
         return;
@@ -517,14 +535,14 @@ class LiveVoiceClient {
   private appendTranscriptDelta(kind: 'you' | 'voice', delta: string, endMs?: number): void {
     const store = this.store.getState();
     const open = this.openLines[kind];
-    const gap = open && typeof endMs === 'number' && open.endMs !== null ? endMs - open.endMs : Number.POSITIVE_INFINITY;
+    const gap = open && endMs !== undefined && open.endMs !== null ? endMs - open.endMs : Number.POSITIVE_INFINITY;
     if (!open || gap > LIMITS.TURN_GAP_MS) {
       const id = store.appendTranscript(kind, delta);
-      this.openLines[kind] = { id, endMs: typeof endMs === 'number' ? endMs : null };
+      this.openLines[kind] = { id, endMs: endMs !== undefined ? endMs : null };
       return;
     }
     store.extendTranscript(open.id, delta);
-    if (typeof endMs === 'number') open.endMs = endMs;
+    if (endMs !== undefined) open.endMs = endMs;
   }
 
   // -- delegation -----------------------------------------------------------
@@ -970,10 +988,20 @@ const resolveSessionStatus = (sessionId: string, directory: string): 'busy' | 'i
   if (status === 'busy' || status === 'retry') return 'busy';
   const messages = state.message[sessionId] ?? [];
   const last = messages[messages.length - 1];
-  if (last?.role === 'assistant' && typeof (last as { time?: { completed?: number } }).time?.completed !== 'number') {
+  // `role === 'assistant'` narrows to the message shape that carries a
+  // completion timestamp; absent (or null, from a malformed payload) means the
+  // turn has not finished, which is the evidence this function is after.
+  if (last?.role === 'assistant' && last.time.completed == null) {
     return 'busy';
   }
   return 'idle';
+};
+
+/** Which model and agent a delegation prompt runs as. */
+type SendConfig = {
+  providerID: string | undefined;
+  modelID: string | undefined;
+  agent: string | undefined;
 };
 
 /**
@@ -981,11 +1009,7 @@ const resolveSessionStatus = (sessionId: string, directory: string): 'busy' | 'i
  * assistant model wins over the composer's picker: a voice job must not change
  * the model of a session the user is reading in another tab.
  */
-const resolveSendConfig = (sessionId: string): {
-  providerID: string | undefined;
-  modelID: string | undefined;
-  agent: string | undefined;
-} => {
+const resolveSendConfig = (sessionId: string): SendConfig => {
   const lastUsed = getSessionLastAssistantModel(sessionId);
   const config = useConfigStore.getState();
   // The panel's own pick wins: it is the one the user chose for voice work,
@@ -1012,20 +1036,27 @@ export const getLiveVoiceClient = (): LiveVoiceClient => {
     client = new LiveVoiceClient();
     // A reload cannot keep the session: the peer connection dies with the
     // page, so the microphone must be released before the tab goes.
-    if (typeof window !== 'undefined') {
+    if ('window' in globalThis) {
       window.addEventListener('beforeunload', () => client?.stop());
     }
   }
   return client;
 };
 
+declare global {
+  interface Window {
+    /** The transport handle a headless check reads; nothing in the app reads it back. */
+    openchamberLiveVoice?: { snapshot: () => ReturnType<LiveVoiceClient['snapshot']> };
+  }
+}
+
 /**
  * The same handle on `window`, so a headless check can assert transport state
  * (`pc`, `dc`, mic tracks) without a build step or a test hook. Reached from
  * `page.evaluate` only; nothing in the app reads it back.
  */
-if (typeof window !== 'undefined') {
-  (window as unknown as { openchamberLiveVoice?: unknown }).openchamberLiveVoice = {
+if ('window' in globalThis) {
+  window.openchamberLiveVoice = {
     snapshot: () => getLiveVoiceClient().snapshot(),
   };
 }
