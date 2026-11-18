@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { Component, StrictMode, Suspense, lazy, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/fonts'
 import './styles/katex-css'
@@ -66,6 +66,34 @@ if (!rootElement) {
 // text instead of empty message boxes until the chunk arrives.
 preloadMarkdownRenderer();
 
+// Third-party component-library mount proof, development builds only. It sits
+// at the app root rather than in MainLayout's dev slot because the app-wide
+// gates (auth, OpenCode-version check) replace the whole tree before MainLayout
+// ever mounts; a proof that disappears behind a gate proves nothing. The import
+// is dropped from production bundles.
+const VqMountPanel = import.meta.env.DEV ? lazy(() => import('./components/dev/VqMountPanel')) : null;
+
+// A rejected dynamic import surfaces as a render error, and without a boundary
+// above it React unmounts the whole root: one unloadable dev panel would blank
+// the entire app. This catches it and renders nothing instead. The log stays —
+// a boundary that hides a broken panel makes the thing it exists to prove
+// invisible to whoever is debugging it.
+class VqMountBoundary extends Component<{ children?: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[vq-mount-proof] failed to load', error, info.componentStack);
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 createRoot(rootElement).render(
   <StrictMode>
     <I18nProvider>
@@ -74,6 +102,11 @@ createRoot(rootElement).render(
           <SessionAuthGate>
             <App apis={runtimeAPIs} />
           </SessionAuthGate>
+          {VqMountPanel ? (
+            <VqMountBoundary>
+              <Suspense fallback={null}><VqMountPanel /></Suspense>
+            </VqMountBoundary>
+          ) : null}
         </ThemeProvider>
       </ThemeSystemProvider>
     </I18nProvider>
