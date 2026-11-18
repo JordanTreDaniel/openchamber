@@ -169,7 +169,7 @@ function MarkdownCodeBlock({ children, className, node, command, ...props }: Cod
     if (purpose && language !== 'mermaid') onExportCode?.(code, language);
   }, [purpose, onExportCode, code, language]);
 
-  if (language === 'mermaid' || (language === 'openui-lang' && presentation.uiBlocks)) {
+  if (language === 'mermaid' || ((language === 'openui-lang' || language === 'vq') && presentation.uiBlocks)) {
     return (
       <defaultComponents.code {...props} node={node} className={className}>
         {children}

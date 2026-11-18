@@ -50,6 +50,7 @@ import { MarkdownCode } from './markdown/MarkdownCode';
 import { MarkdownTable, MarkdownTableCell } from './markdown/MarkdownTable';
 import { MarkdownMermaid } from './markdown/MarkdownMermaid';
 import { MarkdownUiBlock } from './markdown/MarkdownUiBlock';
+import { MarkdownVqBlock } from './MarkdownVqBlock';
 import { MarkdownBlockquote } from './markdown/MarkdownBlockquote';
 import { createMarkdownCodePlugin } from './markdown/streamdownCode';
 import { confirmCodePaths, confirmMarkdownFile, resolveMarkdownFile } from './markdown/markdownFileReferences';
@@ -162,6 +163,7 @@ const renderers = [
   { language: 'mermaid', component: MarkdownMermaid },
   // Reached only where `uiBlocks` is on (MarkdownCode); elsewhere the block stays code.
   { language: 'openui-lang', component: MarkdownUiBlock },
+  { language: 'vq', component: MarkdownVqBlock },
 ];
 const linkSafety = { enabled: false };
 const remend: StreamdownProps['remend'] = { linkMode: 'text-only', singleTilde: false };
