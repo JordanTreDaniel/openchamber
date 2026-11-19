@@ -9,6 +9,7 @@ import {
   type VqSourceSpec,
 } from '@/lib/vq/source';
 import { buildVqAnswerPayload, vqAnswerText } from '@/lib/vq/answer';
+import { installVqWriter } from '@/lib/vq/writer';
 import { uiBlockKey } from './uiBlocks/answer';
 import { useMarkdownPresentation } from './markdown/MarkdownPresentationContext';
 
@@ -34,6 +35,10 @@ function loadVqRuntime(): Promise<VqRuntime> {
   if (vqRuntime) return Promise.resolve(vqRuntime);
   if (!vqRuntimeRequest) {
     vqRuntimeRequest = import('vq-react').then((module) => {
+      // Before the first fence can answer: an answer writes itself to the
+      // folder its spec names, which the app's writer does and the browser's
+      // folder picker cannot. Idempotent with the install at startup.
+      installVqWriter(module);
       vqRuntime = {
         VQ: module.VQ,
         // Host tokens by bare variable name: `hostTheme` wraps each one in var() itself.

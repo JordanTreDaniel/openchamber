@@ -17,6 +17,7 @@ import { startModelPrefsAutoSave } from './lib/modelPrefsAutoSave'
 import { initializeLocale, I18nProvider } from './lib/i18n'
 import type { RuntimeAPIs } from './lib/api/types'
 import { installRuntimeEndpointReset } from './apps/runtimeEndpointReset'
+import { installVqWriterLoader } from './lib/vq/writer'
 import { forgetLayoutForSafeStart, isDesktopSafeStart } from './lib/desktopSafeStart'
 import { prefetchOpenCodeCompatibility } from './components/update/openCodeCompatibilityCheck'
 
@@ -33,6 +34,11 @@ const runtimeAPIs = (typeof window !== 'undefined' && window.__OPENCHAMBER_RUNTI
 initializeLocale();
 if (isDesktopSafeStart()) forgetLayoutForSafeStart();
 installRuntimeEndpointReset();
+// A `vq` answer's files go to the folder its spec names, through the app's own
+// file route rather than the browser's folder picker, which a server cannot
+// answer. The library loads on demand there, so this install is fire and
+// forget: the fence's loader installs the same writer when a fence arrives.
+installVqWriterLoader();
 prefetchOpenCodeCompatibility();
 
 // Initialize settings asynchronously — the app renders with defaults first

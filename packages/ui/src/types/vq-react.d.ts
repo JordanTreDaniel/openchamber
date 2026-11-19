@@ -9,7 +9,7 @@
 // Declaring the surface here keeps the project reference build whole and keeps
 // the panel type-checked against a contract, instead of silencing the import.
 // The runtime shape is defined by the library itself:
-// VQ.tsx, tokens.ts and types.ts in the library's own src/ directory.
+// VQ.tsx, tokens.ts, types.ts and output.ts in the library's own src/ directory.
 declare module 'vq-react' {
   import type * as React from 'react';
   /** Every visual value is a CSS variable reference so hosts can retheme. */
@@ -62,4 +62,33 @@ declare module 'vq-react' {
   }
 
   export const VQ: (props: VQProps) => React.JSX.Element;
+
+  /** One artifact of an answer: text (JSON, markdown) or a Blob (audio). */
+  export interface OutputFile {
+    name: string;
+    data: string | Blob;
+    mime: string;
+  }
+
+  /** What a writer is given: the per-answer folder is already part of `path`. */
+  export interface Destination {
+    kind: string;
+    path?: string;
+    remote?: string;
+    prefix?: string;
+  }
+
+  /** Where a write ended: the folder, and one reason per file that failed. */
+  export interface WriteResult {
+    ok: boolean;
+    location: string;
+    errors?: string[];
+  }
+
+  /** A destination implementation, keyed by the `kind` a spec names. */
+  export interface Writer {
+    write(files: OutputFile[], dest: Destination): Promise<WriteResult>;
+  }
+
+  export function registerWriter(kind: string, writer: Writer): void;
 }
