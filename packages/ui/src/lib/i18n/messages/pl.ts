@@ -79,6 +79,7 @@ export const dict: Record<I18nKey, string> = {
   "opencodeCompatibility.outdatedExternal": "Połączony serwer używa OpenCode {version}. Zaktualizuj go do OpenCode {minimum} lub nowszego, a następnie połącz się ponownie.",
   "opencodeCompatibility.update": "Zaktualizuj OpenCode",
   "opencodeCompatibility.local": "Zainstalowano OpenCode {version}. Ta wersja OpenChamber wymaga OpenCode v2.",
+  "opencodeCompatibility.unavailableLocal": "OpenChamber nie mógł odczytać wersji OpenCode z pliku {path}. Ta wersja OpenChamber wymaga OpenCode {minimum} lub nowszego. Uruchom `opencode --version`, aby zobaczyć, czym jest ten plik, albo ustaw OPENCODE_BINARY na ścieżkę nowszej wersji i sprawdź ponownie.",
   "opencodeCompatibility.external": "Połączony serwer używa OpenCode {version}. Zainstaluj na nim OpenCode v2, a następnie połącz się ponownie.",
   "opencodeCompatibility.installDescription": "OpenChamber zainstaluje v2 za pomocą oficjalnego instalatora, a następnie uruchomi ponownie OpenCode.",
   "opencodeCompatibility.install": "Zaktualizuj do OpenCode v2",

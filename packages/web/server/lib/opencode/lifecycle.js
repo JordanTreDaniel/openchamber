@@ -1,4 +1,4 @@
-import { readOpenCodeInfo, readExternalOpenCodeVersion, isSupportedOpenCodeVersion, requireOpenCodeV2, UnsupportedOpenCodeVersionError } from './compatibility.js';
+import { readOpenCodeInfo, readExternalOpenCodeVersion, isSupportedOpenCodeVersion, requireOpenCodeV2, UnsupportedOpenCodeVersionError, MINIMUM_OPENCODE_VERSION } from './compatibility.js';
 import { spawn, spawnSync } from 'node:child_process';
 import { accessSync, constants as fsConstants, statSync } from 'node:fs';
 import net from 'node:net';
@@ -719,6 +719,52 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
   // Trying the same binary again cannot help; the user has to change it first.
   const isBinaryRejected = (error) => error instanceof UnsupportedOpenCodeVersionError || error?.code === 'OPENCODE_BINARY_INVALID';
 
+  // Which file OpenChamber resolved and where it came from, as one fragment.
+  // A vq fence that never appears has no other symptom, so both the launch
+  // line and the failure block name the binary and its source.
+  const describeManagedBinary = (binary = null) => {
+    const resolved = binary || state.resolvedOpencodeBinary || null;
+    const source = state.resolvedOpencodeBinarySource || 'unknown';
+    return resolved ? `binary=${resolved} source=${source}` : `binary=unknown source=${source}`;
+  };
+
+  /**
+   * The one bootstrap failure that must be loud. Every other error leaves the
+   * server up with its message readable in the UI; an OpenCode below the
+   * minimum instead drops the ```vq fence and the 2.x routes the UI asks for,
+   * so the app looks broken while running. Naming the file that answered
+   * `--version` is the whole diagnosis.
+   *
+   * It is loud in the terminal and nowhere else: the process keeps running,
+   * because the screen that carries the remedy (`OpenCodeCompatibilityGate`,
+   * fed by `/api/opencode/compatibility`) is served by this same process.
+   * Exiting here would take the fix away with the symptom.
+   */
+  const reportUnsupportedOpenCodeVersion = (error) => {
+    if (state.isExternalOpenCode) {
+      console.error(`[OpenCode] Unsupported OpenCode at the external server: version=${error.version} minimum=${MINIMUM_OPENCODE_VERSION}`);
+      console.error(`[OpenCode] Run that server on OpenCode ${MINIMUM_OPENCODE_VERSION} or newer, or unset OPENCODE_PORT so OpenChamber starts its own.`);
+      console.error('[OpenCode] Until then OpenChamber WILL block in the browser at the compatibility screen; this process stays up so that screen can load.');
+      return;
+    }
+    if (process.env.OPENCHAMBER_RUNTIME === 'desktop') {
+      console.error(`[OpenCode] Bundled OpenCode ${error.version} is below the minimum ${MINIMUM_OPENCODE_VERSION}; this desktop build is wrong.`);
+      console.error('[OpenCode] OpenChamber WILL block in the browser at the compatibility screen; this process stays up so that screen can load.');
+      return;
+    }
+    console.error(`[OpenCode] Unsupported OpenCode: ${describeManagedBinary()} version=${error.version} minimum=${MINIMUM_OPENCODE_VERSION}`);
+    console.error(`[OpenCode] Set OPENCODE_BINARY=/path/to/opencode (${MINIMUM_OPENCODE_VERSION} or newer) and start OpenChamber again.`);
+    console.error('[OpenCode] OpenChamber WILL block in the browser at the "OpenCode v2 required" screen until then: press "Update to OpenCode v2" there, or set OPENCODE_BINARY. This process stays up so that screen can load.');
+  };
+
+  // A server we did not start has no binary of ours behind it: its version is
+  // not ours to check, and the plugin carrying `openchamber_render` lives only
+  // in a process we launch, so page rendering is off for the whole session.
+  const logExternalOpenCode = (label) => {
+    console.warn(`[OpenCode] External server at ${label} is not versioned by OpenChamber (it needs ${MINIMUM_OPENCODE_VERSION} or newer)`);
+    console.warn('[OpenCode] vq page rendering and the openchamber_render tool stay off for an external server');
+  };
+
   const startOpenCodeOnce = async (attempt) => {
     const attemptStartedAt = performance.now();
     let phaseStartedAt = attemptStartedAt;
@@ -733,9 +779,27 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
 
     await applyOpencodeBinaryFromSettings({ strict: true });
     const resolvedBinary = ensureOpencodeCliEnv();
-    const preflight = checkOpenCodeBinary(resolveManagedOpenCodeLaunchSpec(resolvedBinary));
+    const launchSpec = resolveManagedOpenCodeLaunchSpec(resolvedBinary);
+    const preflight = checkOpenCodeBinary(launchSpec);
     managedPreflight = preflight.then(() => true, () => false);
-    await preflight;
+    // The line a stale `opencode` on PATH gets caught by: the file we will run,
+    // the version it answered with, and where the resolution found it. It must
+    // survive a rejected preflight too, because that rejection is exactly the
+    // case it exists to explain and the one thing a blank UI does not say.
+    const binaryLine = (version) => `[OpenCode] ${describeManagedBinary(launchSpec.binary)} version=${version} (minimum ${MINIMUM_OPENCODE_VERSION}; override with OPENCODE_BINARY=/path/to/opencode)`;
+    let launchVersion;
+    try {
+      launchVersion = await preflight;
+    } catch (error) {
+      // A rejected binary names itself too. A known-but-unsupported version is
+      // reported as it is; a file that answered nothing is the only "unreadable".
+      const version = error instanceof UnsupportedOpenCodeVersionError
+        ? error.version
+        : `unreadable — ${String(error?.message ?? error).split('\n')[0]}`;
+      console.log(binaryLine(version));
+      throw error;
+    }
+    console.log(binaryLine(launchVersion ?? 'unknown'));
     recordStartupPerformance('opencode.binary.ready', {
       attempt,
       durationMs: performance.now() - phaseStartedAt,
@@ -1182,6 +1246,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       } else if (env.ENV_SKIP_OPENCODE_START && env.ENV_EFFECTIVE_PORT) {
         const label = env.ENV_CONFIGURED_OPENCODE_HOST ? env.ENV_CONFIGURED_OPENCODE_HOST.origin : `http://localhost:${env.ENV_EFFECTIVE_PORT}`;
         console.log(`Using external OpenCode server at ${label} (skip-start mode)`);
+        logExternalOpenCode(label);
         state.openCodeBaseUrl = env.ENV_CONFIGURED_OPENCODE_HOST?.origin ?? null;
         setOpenCodePort(env.ENV_EFFECTIVE_PORT);
         state.isOpenCodeReady = true;
@@ -1193,6 +1258,7 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       } else if (env.ENV_EFFECTIVE_PORT && await probeExternalOpenCode(env.ENV_EFFECTIVE_PORT, env.ENV_CONFIGURED_OPENCODE_HOST?.origin)) {
         const label = env.ENV_CONFIGURED_OPENCODE_HOST ? env.ENV_CONFIGURED_OPENCODE_HOST.origin : `http://localhost:${env.ENV_EFFECTIVE_PORT}`;
         console.log(`Auto-detected existing OpenCode server at ${label}`);
+        logExternalOpenCode(label);
         state.openCodeBaseUrl = env.ENV_CONFIGURED_OPENCODE_HOST?.origin ?? null;
         setOpenCodePort(env.ENV_EFFECTIVE_PORT);
         state.isOpenCodeReady = true;
@@ -1251,9 +1317,16 @@ export const createOpenCodeLifecycleRuntime = (deps) => {
       }
     } catch (error) {
       bootstrapError = error;
-      console.error(`Failed to start OpenCode: ${error.message}`);
-      console.log('Continuing without OpenCode integration...');
       state.lastOpenCodeError = error.message;
+      if (error instanceof UnsupportedOpenCodeVersionError) {
+        // The UI cannot use a too-old CLI, so the reason gets a block of its
+        // own instead of one `Failed to start` line. The server keeps running
+        // either way: the browser gate that carries the fix is served by it.
+        reportUnsupportedOpenCodeVersion(error);
+      } else {
+        console.error(`Failed to start OpenCode: ${error.message}`);
+      }
+      console.log('Continuing without OpenCode integration...');
     }
     lastBootstrapError = bootstrapError;
     diagnosticJournal.record(bootstrapError ? 'bootstrap failed' : 'bootstrap ready');

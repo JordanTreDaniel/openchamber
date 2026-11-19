@@ -98,3 +98,25 @@ export function buildVqAnswerPayload(specId: string, answer: Answer): UiBlockRep
     skipped: [],
   };
 }
+
+/**
+ * The answer this fence already gave, read back from the record of its own
+ * send. A block's value is either a string or a list of them, and only the
+ * string under this fence's own key is its envelope, so every other shape is
+ * a different block or a different field: rejected, never thrown.
+ */
+export function readVqAnswer(
+  values: Record<string, string | string[]> | undefined,
+  specId: string,
+): Answer | null {
+  const raw = values?.[specId];
+  if (typeof raw !== 'string' || !raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return parsed as Answer;
+}

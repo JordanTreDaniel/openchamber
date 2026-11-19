@@ -15,7 +15,7 @@ const legacyHealthSchema = z.object({ version: versionSchema, healthy: z.boolean
  * `archived` to `PATCH /api/session/{id}`, 2.0.20 `GET /api/credential`,
  * 2.0.15 `PATCH /api/session` metadata.)
  */
-const MINIMUM_OPENCODE_VERSION = '2.2.4';
+export const MINIMUM_OPENCODE_VERSION = '2.2.4';
 
 const releaseParts = (version) => version.split(/[-+]/, 1)[0].split('.').map(Number);
 

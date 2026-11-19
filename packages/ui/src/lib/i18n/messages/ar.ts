@@ -78,6 +78,7 @@ export const dict = {
   'opencodeCompatibility.outdatedExternal': 'الخادم المتصل يعمل بالإصدار OpenCode {version}. حدّثه إلى OpenCode {minimum} أو أحدث، ثم أعد الاتصال.',
   'opencodeCompatibility.update': 'تحديث OpenCode',
   'opencodeCompatibility.local': 'الإصدار المثبّت هو OpenCode {version}. يتطلب هذا الإصدار من OpenChamber الإصدار OpenCode v2.',
+  'opencodeCompatibility.unavailableLocal': 'تعذّر على OpenChamber قراءة إصدار OpenCode من الملف التنفيذي في {path}. يتطلب إصدار OpenChamber هذا الإصدار {minimum} من OpenCode أو أحدث. شغّل `opencode --version` لمعرفة ما هو هذا الملف، أو اضبط OPENCODE_BINARY على مسار إصدار أحدث، ثم تحقّق مرة أخرى.',
   'opencodeCompatibility.external': 'الخادم المتصل يعمل بالإصدار OpenCode {version}. ثبّت OpenCode v2 على ذلك الخادم، ثم أعد الاتصال.',
   'opencodeCompatibility.installDescription': 'سيثبّت OpenChamber الإصدار v2 باستخدام المثبّت الرسمي، ثم يعيد تشغيل OpenCode.',
   'opencodeCompatibility.install': 'التحديث إلى OpenCode v2',

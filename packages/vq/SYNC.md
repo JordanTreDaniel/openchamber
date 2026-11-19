@@ -15,17 +15,17 @@ drift from upstream only when someone runs the script.
 | Repository URL | **none published.** The upstream checkout has no `.git` directory, no `repository` field, and no repository link in its README — so there is no remote to name and no commit SHA to record. |
 | `author` / `license` fields | **absent** from the upstream `package.json` |
 | `LICENSE` / `LICENSE.md` | **absent** from the upstream checkout |
-| Size copied | 32 files, 2,613 lines of TypeScript |
+| Size copied | 32 files, 2,613 lines of TypeScript — this is `src/` only, and `src/` is the whole of what was copied. Every other file here (`package.json`, `tsconfig.json`, `SYNC.md`, `NOTICE`, `scripts/sync.mjs`) is repo-local. |
 
-The license is therefore **unknown**, and no `LICENSE` was added here because
-inventing one would be a false grant. With no license, the default is all rights
-reserved: this copy must not be published or distributed outside this
-repository until the upstream author's terms are obtained and a real `LICENSE`
-lands in this directory. Treat that as an open blocker, not a formality.
+The license is therefore **absent at origin**. See [`NOTICE`](./NOTICE) for exactly
+what was checked at the upstream source and for the consequence that matters: with
+no license, no rights are granted, so redistribution is unresolved and this is an
+open blocker rather than a formality. No `LICENSE` file was added here, because
+inventing one would be a false grant.
 
 The copy was verified against the checkout it came from with a recursive
-`diff`: identical, except the checkout's `.DS_Store`, which the sync script
-skips.
+`diff` at the time of the copy: identical, except the checkout's `.DS_Store`,
+which the sync script skips. See "Local edits" below for what has since diverged.
 
 ## Why it is vendored
 
@@ -44,6 +44,9 @@ through a Vite alias is the only shape that survives a clean clone.
   `declare module 'vq-react'`, the only type contract the app checks against.
 - `packages/vq/package.json` — `private`, `main: ./src/index.ts`, no build step.
   The host consumes raw TypeScript.
+- `packages/vq/tsconfig.json` — a standalone type-check project for `src/`,
+  referenced from the root `tsconfig.json`. `bun check -b` covers it, so the
+  library's own types are checked at build time, not only at runtime.
 
 ## Deliberate choices — do not undo these
 
@@ -66,21 +69,39 @@ through a Vite alias is the only shape that survives a clean clone.
 - **`sideEffects: false` is kept from upstream.** Every import in the library is
   side-effect free.
 
-## Known limitation: bundled, but never type-checked
+## Type checking — closed 2026-11-19
 
-`packages/vq` appears in **no** tsconfig. `packages/web/tsconfig.json` includes
-`src` plus `../ui/src/**/*.d.ts`; `packages/ui/tsconfig.build.json` includes
-`src` and `../sdk/src`. Neither includes `packages/vq/src`.
+`packages/vq/tsconfig.json` type-checks `src/` on its own terms, and the root
+`tsconfig.json` references it, so `bun run type-check` (which runs
+`bun check -b`) now covers these sources.
 
-So the 2,613 lines are transpiled into the web bundle but no `tsc` run ever
-checks them — only the 97-line ambient declaration is checked, and that
-declaration is a hand-written contract, not the library's own types. A type
-error in the vendored sources surfaces at runtime, in the browser, not at build
-time.
+- `bun run --cwd packages/vq typecheck` — the scoped run.
+- `bun check -p packages/vq` — the same thing from the root.
+- `bun check -b` writes no files, so the reference is safe in a gate.
 
-Closing the gap means adding a project that includes `packages/vq/src` with zod
-3 and React types resolved the way the bundle resolves them. Until then, treat
-"the build passes" as no evidence about this directory.
+Why the config sits here rather than at the root: `zod` must resolve to
+`packages/vq/node_modules/zod` (v3), not the root v4. A project rooted in this
+directory resolves the nested copy.
+
+The config is deliberately minimal — `target`/`lib` ES2022 + DOM, `module` ESNext,
+`moduleResolution: bundler` (every relative specifier is extensionless),
+`jsx: react-jsx`, `strict`, `skipLibCheck`, `noEmit`, `types: []`. It also
+resolves `@types/react` 19 from the host while the library was authored against
+`@types/react` 18; see the local edit below.
+
+## Local edits to `src/` that a sync will overwrite
+
+One local edit exists, made for type-correctness and correct on React 18 as well:
+
+- `src/prims.tsx` — `SvgBox`'s `svgRef` prop is `RefObject<SVGSVGElement | null>`
+  instead of `RefObject<SVGSVGElement>`. Under `@types/react` 19,
+  `useRef<SVGSVGElement>(null)` returns `RefObject<SVGSVGElement | null>`, which
+  is not assignable to the React 18 shape; the widened declaration is valid on
+  both versions and changes no behaviour. Without it the type-check reports 11
+  errors across 8 files.
+
+**A `sync` will overwrite this file.** Carry the change upstream, or re-apply it
+after every sync, or the type-check goes red again.
 
 ## Re-syncing from upstream
 
@@ -94,8 +115,9 @@ VQ_SRC="/path/to/vq-react" bun run --cwd packages/vq sync
   prints how many files it copied.
 - It validates the source before copying anything, changes nothing, and exits
   non-zero when `VQ_SRC` is unset or unreadable.
-- It overwrites `src/` in place. Review `git diff packages/vq/src` and run
-  `bun run build:web` before committing — a sync is a code change to this
+- It overwrites `src/` in place — including the local type fix in `src/prims.tsx`
+  described above. Review `git diff packages/vq/src`, re-apply any local edit, and
+  run `bun run build:web` before committing — a sync is a code change to this
   repository and its blast radius is the web bundle.
 
 Verify a sync with a recursive diff:

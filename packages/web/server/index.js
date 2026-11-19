@@ -1165,6 +1165,15 @@ const guestAgentContext = createGuestAgentContext({
   instructions: guestInstructions,
 });
 
+// One line, once per reason: a ```vq fence that never renders is invisible
+// otherwise, and both reasons it cannot render are states a user cannot see.
+const pageRenderingOffLogged = new Set();
+const logPageRenderingOffOnce = (reason) => {
+  if (pageRenderingOffLogged.has(reason)) return;
+  pageRenderingOffLogged.add(reason);
+  console.warn(`[session-knowledge] Page rendering is off (${reason}): the vq fence and the openchamber_render tool are unavailable`);
+};
+
 const sessionKnowledgeRuntime = createSessionKnowledgeRuntime({
   readExtensionInstructions: guestAgentContext.instructionText,
   projectContextRuntime,
@@ -1186,7 +1195,10 @@ const sessionKnowledgeRuntime = createSessionKnowledgeRuntime({
   },
   readPlaceholderBranch: readRenameableGeneratedBranch,
   isPageRenderingAvailable: async () => {
-    if (isExternalOpenCode || ENV_SKIP_OPENCODE_START) return false;
+    if (isExternalOpenCode || ENV_SKIP_OPENCODE_START) {
+      logPageRenderingOffOnce(isExternalOpenCode ? 'external OpenCode server' : 'skip-start');
+      return false;
+    }
     const settings = await readSettingsFromDiskMigrated().catch(() => null);
     return settings?.agentRenderToolEnabled !== false;
   },
@@ -1782,6 +1794,10 @@ Object.defineProperties(openCodeLifecycleState, {
   resolvedWslBinary: { get: () => resolvedWslBinary, set: (value) => { resolvedWslBinary = value; } },
   resolvedWslOpencodePath: { get: () => resolvedWslOpencodePath, set: (value) => { resolvedWslOpencodePath = value; } },
   resolvedWslDistro: { get: () => resolvedWslDistro, set: (value) => { resolvedWslDistro = value; } },
+  // Read by the lifecycle's launch line and its version-failure block: which
+  // file was resolved, and which of PATH / bundled / settings / env named it.
+  resolvedOpencodeBinary: { get: () => resolvedOpencodeBinary, set: (value) => { resolvedOpencodeBinary = value; } },
+  resolvedOpencodeBinarySource: { get: () => resolvedOpencodeBinarySource, set: (value) => { resolvedOpencodeBinarySource = value; } },
 });
 
 const openCodeLifecycleRuntime = createOpenCodeLifecycleRuntime({

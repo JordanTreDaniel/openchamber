@@ -432,7 +432,12 @@ export const createSessionKnowledgeRuntime = (dependencies) => {
       : false;
     const checkout = branch !== null ? { directory, branch, placeholder } : null;
 
-    const rendering = await Promise.resolve(isPageRenderingAvailable()).catch(() => false);
+    // A probe that fails must not read as "the user turned it off": the vq
+    // fence then never appears and nothing says why.
+    const rendering = await Promise.resolve(isPageRenderingAvailable()).catch((error) => {
+      console.warn('[session-knowledge] page rendering probe failed:', error?.message || error);
+      return false;
+    });
     const secrets = await Promise.resolve(isSecretRequestAvailable()).catch(() => false);
     const workflows = await Promise.resolve(isWorkflowAvailable()).catch(() => false);
 

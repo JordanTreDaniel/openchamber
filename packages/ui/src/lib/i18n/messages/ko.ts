@@ -79,6 +79,7 @@ export const dict: Record<I18nKey, string> = {
   "opencodeCompatibility.outdatedExternal": "연결된 서버에서 OpenCode {version}을 사용하고 있습니다. OpenCode {minimum} 이상으로 업데이트한 후 다시 연결하세요.",
   "opencodeCompatibility.update": "OpenCode 업데이트",
   "opencodeCompatibility.local": "OpenCode {version}이 설치되어 있습니다. 이 버전의 OpenChamber에는 OpenCode v2가 필요합니다.",
+  "opencodeCompatibility.unavailableLocal": "OpenChamber가 {path}의 바이너리에서 OpenCode 버전을 읽지 못했습니다. 이 OpenChamber 버전에는 OpenCode {minimum} 이상이 필요합니다. `opencode --version`을 실행해 해당 파일을 확인하거나, 더 새로운 버전의 경로로 OPENCODE_BINARY를 설정한 뒤 다시 확인하세요.",
   "opencodeCompatibility.external": "연결된 서버에서 OpenCode {version}을 사용하고 있습니다. 해당 서버에 OpenCode v2를 설치한 후 다시 연결하세요.",
   "opencodeCompatibility.installDescription": "OpenChamber가 공식 설치 프로그램으로 v2를 설치한 다음 OpenCode를 다시 시작합니다.",
   "opencodeCompatibility.install": "OpenCode v2로 업데이트",

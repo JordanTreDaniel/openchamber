@@ -25,6 +25,7 @@ vi.mock('./startup-performance.js', () => ({
 
 const { createOpenCodeLifecycleRuntime } = await import('./lifecycle.js');
 const { createServerDiagnosticJournal } = await import('../diagnostics/server-journal.js');
+const { describeOpenCodeCompatibility, UnsupportedOpenCodeVersionError } = await import('./compatibility.js');
 
 const originalOpencodeBinary = process.env.OPENCODE_BINARY;
 const originalPath = process.env.PATH;
@@ -285,6 +286,10 @@ describe('OpenCode lifecycle', () => {
 
   it('attaches to an OPENCODE_HOST running OpenCode v1 instead of starting a managed server', async () => {
     const requested = [];
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const exits = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code}) must not run: the browser gate has to stay reachable`);
+    });
     globalThis.fetch = vi.fn(async (url) => {
       const href = String(url);
       requested.push(href);
@@ -299,15 +304,133 @@ describe('OpenCode lifecycle', () => {
       ENV_EFFECTIVE_PORT: 4095,
     });
 
-    await runtime.bootstrapOpenCodeAtStartup();
+    try {
+      await runtime.bootstrapOpenCodeAtStartup();
 
-    expect(spawnMock).not.toHaveBeenCalled();
-    expect(requested).toContain('http://seamus:4095/global/health');
-    expect(runtime.testState.isExternalOpenCode).toBe(true);
-    expect(runtime.testState.isOpenCodeReady).toBe(false);
-    expect(runtime.testState.openCodeBaseUrl).toBe('http://seamus:4095');
-    expect(runtime.testState.openCodePort).toBe(4095);
-    expect(runtime.testState.lastOpenCodeError).toContain('1.18.32');
+      expect(spawnMock).not.toHaveBeenCalled();
+      expect(requested).toContain('http://seamus:4095/global/health');
+      expect(runtime.testState.isExternalOpenCode).toBe(true);
+      expect(runtime.testState.isOpenCodeReady).toBe(false);
+      expect(runtime.testState.openCodeBaseUrl).toBe('http://seamus:4095');
+      expect(runtime.testState.openCodePort).toBe(4095);
+      expect(runtime.testState.lastOpenCodeError).toContain('1.18.32');
+      expect(errors.mock.calls.map(([line]) => String(line)).some((line) => line.includes('version=1.18.32 minimum=2.2.4'))).toBe(true);
+      expect(exits).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      exits.mockRestore();
+    }
+  });
+
+  it('names the binary and source on the managed launch line before it uses it', async () => {
+    delete process.env.OPENCODE_BINARY;
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const child = createMockChild();
+    spawnMock.mockImplementation(() => {
+      queueMicrotask(() => child.stdout.emit('data', 'opencode server listening on http://127.0.0.1:45678\n'));
+      return child;
+    });
+    try {
+      const runtime = createRuntime({
+        ensureOpencodeCliEnv: vi.fn(() => '/usr/local/bin/opencode'),
+        checkOpenCodeBinary: async () => '2.2.5',
+      }, { resolvedOpencodeBinarySource: 'path' });
+      await runtime.startOpenCode();
+
+      expect(logs.mock.calls.map(([line]) => String(line))).toContain(
+        '[OpenCode] binary=/usr/local/bin/opencode source=path version=2.2.5 (minimum 2.2.4; override with OPENCODE_BINARY=/path/to/opencode)',
+      );
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  // A too-old CLI cannot be repaired from inside the process: the browser gate
+  // (`OpenCodeCompatibilityGate`) is the only surface with the installer, and
+  // this server is what serves it. So the failure is loud in the terminal and
+  // the process keeps running.
+  it('reports an unsupported managed OpenCode loudly and leaves the server up', async () => {
+    delete process.env.OPENCODE_BINARY;
+    const unsupported = new UnsupportedOpenCodeVersionError('1.19.3');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const exits = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code}) must not run: it would kill the screen carrying the fix`);
+    });
+    try {
+      const runtime = createRuntime({
+        reapManagedOrphanedProcesses: vi.fn(async () => ({ reaped: 0 })),
+        checkOpenCodeBinary: async () => { throw unsupported; },
+        ensureOpencodeCliEnv: vi.fn(() => '/opt/stale/bin/opencode'),
+      }, {
+        // `index.js` records the resolution here, so the failure block can name
+        // the file without the error having to carry it.
+        resolvedOpencodeBinary: '/opt/stale/bin/opencode',
+        resolvedOpencodeBinarySource: 'env',
+      });
+
+      await expect(runtime.bootstrapOpenCodeAtStartup()).resolves.toBeUndefined();
+
+      const block = errors.mock.calls.map(([line]) => String(line));
+      expect(block).toContain('[OpenCode] Unsupported OpenCode: binary=/opt/stale/bin/opencode source=env version=1.19.3 minimum=2.2.4');
+      expect(block.some((line) => line.includes('OPENCODE_BINARY=/path/to/opencode'))).toBe(true);
+      expect(block.some((line) => line.includes('WILL block in the browser') && line.includes('Update to OpenCode v2'))).toBe(true);
+      expect(exits).not.toHaveBeenCalled();
+      expect(logs.mock.calls.map(([line]) => String(line))).toContain('Continuing without OpenCode integration...');
+      // The launch line names the file even though the preflight rejected it:
+      // "no `[OpenCode] binary=` line" is how the runbook tells a managed
+      // instance from an external one, so a rejection must not hide it — and
+      // it must not print twice, or the rule stops distinguishing anything.
+      const launchLines = logs.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith('[OpenCode] binary='));
+      expect(launchLines).toHaveLength(1);
+      expect(launchLines[0]).toContain('binary=/opt/stale/bin/opencode source=env version=1.19.3');
+      expect(spawnMock).not.toHaveBeenCalled();
+      expect(runtime.testState.lastOpenCodeError).toContain('1.19.3');
+
+      // The payload the gate blocks on, built from the version that failed.
+      expect(describeOpenCodeCompatibility(unsupported.version, 'managed', true)).toMatchObject({
+        state: 'incompatible',
+        version: '1.19.3',
+        minimumVersion: '2.2.4',
+      });
+    } finally {
+      errors.mockRestore();
+      logs.mockRestore();
+      exits.mockRestore();
+    }
+  });
+
+  it('reports a bundled desktop CLI below the minimum without exiting either', async () => {
+    delete process.env.OPENCODE_BINARY;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const exits = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code}) must not run`);
+    });
+    const previousRuntime = process.env.OPENCHAMBER_RUNTIME;
+    process.env.OPENCHAMBER_RUNTIME = 'desktop';
+    try {
+      const runtime = createRuntime({
+        reapManagedOrphanedProcesses: vi.fn(async () => ({ reaped: 0 })),
+        checkOpenCodeBinary: async () => { throw new UnsupportedOpenCodeVersionError('1.19.3'); },
+      });
+
+      await runtime.bootstrapOpenCodeAtStartup();
+
+      const block = errors.mock.calls.map(([line]) => String(line));
+      expect(block.some((line) => line.includes('this desktop build is wrong'))).toBe(true);
+      expect(block.some((line) => line.includes('WILL block in the browser'))).toBe(true);
+      expect(exits).not.toHaveBeenCalled();
+      expect(logs.mock.calls.map(([line]) => String(line))).toContain('Continuing without OpenCode integration...');
+    } finally {
+      if (typeof previousRuntime === 'string') process.env.OPENCHAMBER_RUNTIME = previousRuntime;
+      else delete process.env.OPENCHAMBER_RUNTIME;
+      errors.mockRestore();
+      logs.mockRestore();
+      exits.mockRestore();
+    }
   });
 
   it('warms only the last-used directory after a successful bootstrap', async () => {

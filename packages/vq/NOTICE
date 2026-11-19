@@ -1,0 +1,67 @@
+# NOTICE — vendored `vq-react`
+
+This directory holds a **vendored copy** of the `vq-react` package, version
+`0.1.0`. It was copy-pasted into this repository, not installed from a package
+registry. `src/` is the whole of what was copied.
+
+## Where it came from
+
+The source is the upstream `vq-react` distribution described in `SYNC.md`.
+There is **no published repository** for this package, so this NOTICE records
+neither an upstream URL nor a pinned commit — neither exists to record.
+
+Verified on 2026-11-19 (UTC):
+
+- `curl -s -w "HTTP %{http_code}" https://registry.npmjs.org/vq-react` returned
+  **HTTP 404** (`{"error":"Not found"}`). The package is not published on npm.
+- The upstream checkout used for the copy (a local directory named
+  `vq-react 2`) has **no `.git` directory**, so there is no remote and no
+  commit SHA.
+- A GitHub repository search for `vq-react` and a search for the package's exact
+  description returned no matching repository.
+
+## Re-syncing
+
+```bash
+VQ_SRC="/path/to/vq-react" bun run --cwd packages/vq sync
+```
+
+**A re-sync OVERWRITES `src/` in place.** Any local modification to a file under
+`src/` is lost by that command. See `SYNC.md` for the current list of local
+edits.
+
+## Licensing — NO LICENSE WAS FOUND AT ORIGIN
+
+The following were checked, and none of them yielded a license or a grant of
+rights:
+
+- No `LICENSE`, `LICENSE.md`, `NOTICE`, or `COPYING` file exists anywhere in the
+  upstream checkout (checked to two directory levels, excluding `node_modules`).
+- The upstream `package.json` has **no `license` field** and **no `author`
+  field**.
+- The upstream `README.md` contains **no mention** of "license", "licence",
+  "copyright", "©", or "all rights reserved".
+- The built output in the upstream checkout's `dist/` carries **no license or
+  copyright banner**.
+- The package is **not published on npm** (HTTP 404), so no registry metadata
+  declares terms either.
+
+**Consequence.** Absence of a license grants no rights. The default rule is that
+all rights are reserved by the copyright holder. Therefore **redistribution of
+these sources is unresolved**, and this is an **open blocker — not a
+formality** — before any artifact that bundles them is published or distributed
+outside this repository.
+
+This NOTICE deliberately **does not assert a license**. Writing a license here
+would fabricate a grant that the upstream author never made. Obtain the
+upstream author's terms first; only then add a real `LICENSE` file to this
+directory.
+
+If you are looking for the pattern used by other vendored code in this
+repository (`packages/ui/src/lib/ghostty/LICENSE-T3CODE`), note that it cannot
+be followed here: that precedent names an upstream URL and granted terms, and
+for `vq-react` neither exists.
+
+---
+
+Last verification: **2026-11-19 (UTC)**. Version copied: **`vq-react` 0.1.0**.

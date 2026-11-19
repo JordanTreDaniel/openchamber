@@ -78,6 +78,7 @@ export const dict = {
   "opencodeCompatibility.outdatedExternal": "Bağlı sunucuda OpenCode {version} çalışıyor. Sunucuyu OpenCode {minimum} veya daha yeni bir sürüme güncelleyip yeniden bağlanın.",
   "opencodeCompatibility.update": "OpenCode’u güncelle",
   "opencodeCompatibility.local": "OpenCode {version} yüklü. Bu OpenChamber sürümü OpenCode v2 gerektirir.",
+  "opencodeCompatibility.unavailableLocal": "OpenChamber, {path} konumundaki ikili dosyadan bir OpenCode sürümü okuyamadı. OpenChamber'ın bu sürümü OpenCode {minimum} veya daha yenisini gerektirir. Bu dosyanın ne olduğunu görmek için `opencode --version` çalıştırın ya da OPENCODE_BINARY değişkenini daha yeni bir sürümün yolu olarak ayarlayıp yeniden kontrol edin.",
   "opencodeCompatibility.external": "Bağlı sunucuda OpenCode {version} çalışıyor. Bu sunucuya OpenCode v2 yükleyip yeniden bağlanın.",
   "opencodeCompatibility.installDescription": "OpenChamber, resmî yükleyiciyle v2 sürümünü yükleyecek ve ardından OpenCode’u yeniden başlatacak.",
   "opencodeCompatibility.install": "OpenCode v2’ye güncelle",

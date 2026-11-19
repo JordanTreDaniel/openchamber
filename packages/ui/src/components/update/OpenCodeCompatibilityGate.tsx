@@ -11,6 +11,15 @@ import { runCompatibilityCheck, takeCompatibilityCheck, type CompatibilityCheck 
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 
 /**
+ * A local install whose version could not be read blocks like an old one: no
+ * route answers, so nothing would render and nothing would say why. An
+ * external server is excluded — there an unreadable version is a connection
+ * problem, and its own recovery owns that case.
+ */
+const blocksAsUnreadable = (compatibility: OpenCodeCompatibility | null): boolean =>
+  compatibility?.state === 'unavailable' && compatibility.installation !== 'external';
+
+/**
  * The app mounts at once and keeps starting while the check runs; only a
  * confirmed incompatible OpenCode replaces it with the recovery screen. A
  * failed check leaves the app's own connection recovery in charge.
@@ -51,9 +60,10 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren<{ enabl
   }, [enabled]);
 
   React.useEffect(() => {
-    if (compatibility?.state === 'incompatible') {
-      // The application cannot initialize against v1. Recovery replaces it,
-      // including dismissal of the HTML loading overlay.
+    if (compatibility?.state === 'incompatible' || blocksAsUnreadable(compatibility)) {
+      // The application cannot initialize against v1 or against a binary whose
+      // version is unreadable. Recovery replaces it, including dismissal of the
+      // HTML loading overlay.
       document.getElementById('initial-loading')?.remove();
     }
   }, [compatibility]);
@@ -75,24 +85,30 @@ export const OpenCodeCompatibilityGate: React.FC<React.PropsWithChildren<{ enabl
     }
   };
 
-  if (!enabled || compatibility?.state !== 'incompatible') return <>{children}</>;
+  if (!enabled || !compatibility) return <>{children}</>;
   const external = compatibility.installation === 'external';
   const bundled = compatibility.installation === 'bundled';
+  // See `blocksAsUnreadable`: a working install and an external server both
+  // keep the app, so a blocked screen here always has something to say.
+  const unreadable = blocksAsUnreadable(compatibility);
+  if (compatibility.state !== 'incompatible' && !unreadable) return <>{children}</>;
   // A 2.x below the minimum needs an update, not the v1 → v2 move.
   const minimum = compatibility.minimumVersion;
   const outdated = Boolean(minimum && compatibility.version?.startsWith('2.'));
-  const descriptionKey = bundled
-    ? 'opencodeCompatibility.bundled'
-    : outdated
-      ? external ? 'opencodeCompatibility.outdatedExternal' : 'opencodeCompatibility.outdatedLocal'
-      : external ? 'opencodeCompatibility.external' : 'opencodeCompatibility.local';
+  const descriptionKey = unreadable
+    ? 'opencodeCompatibility.unavailableLocal'
+    : bundled
+      ? 'opencodeCompatibility.bundled'
+      : outdated
+        ? external ? 'opencodeCompatibility.outdatedExternal' : 'opencodeCompatibility.outdatedLocal'
+        : external ? 'opencodeCompatibility.external' : 'opencodeCompatibility.local';
   return (
     <ScrollableOverlay as="section" outerClassName="h-full min-h-0 bg-background" className="app-region-drag flex items-center justify-center px-6 py-10 text-foreground select-none" aria-labelledby={titleId} disableHorizontal>
       <div className="flex w-full max-w-sm flex-col items-center text-center">
         <OpenChamberLogo width={48} height={48} />
         <h1 id={titleId} className="mt-6 text-xl font-semibold tracking-tight">{t(outdated ? 'opencodeCompatibility.outdatedTitle' : 'opencodeCompatibility.title')}</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground text-balance">
-          {t(descriptionKey, { version: compatibility.version ?? '', minimum: minimum ?? '' })}
+          {t(descriptionKey, { version: compatibility.version ?? '', minimum: minimum ?? '', path: compatibility.binary ?? '' })}
           {compatibility.canInstall && <> {t('opencodeCompatibility.installDescription')}</>}
         </p>
         {compatibility.version && (

@@ -110,7 +110,7 @@ Join the iOS beta on [TestFlight](https://testflight.apple.com/join/5ek6GU1E). F
 
 ### CLI for Web and PWA
 
-Requires Node.js 24.14+. CLI/Web and VS Code use your installed [OpenCode CLI](https://opencode.ai).
+Requires Node.js 24.14+. CLI/Web and VS Code use your installed [OpenCode CLI](https://opencode.ai), which must be **2.2.4 or newer** (`opencode --version`; set `OPENCODE_BINARY` if the one on your `PATH` is older).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openchamber/openchamber/main/scripts/install.sh | bash

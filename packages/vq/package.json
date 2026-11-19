@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "sideEffects": false,
   "scripts": {
-    "sync": "node scripts/sync.mjs"
+    "sync": "node scripts/sync.mjs",
+    "typecheck": "bun check"
   },
   "dependencies": {
     "zod": "^3.23.8"

@@ -60,7 +60,7 @@ export function Body({ c, style }: { c?: Content; style?: CSSProperties }) {
 }
 
 /** Responsive SVG: the viewBox tracks the container width, so 1 unit = 1 CSS px. Layout reflows instead of shrinking, which keeps text and touch targets a constant size on phones. */
-export function SvgBox({ h, svgRef, children, max, style, minW = 0 }: { h: number | ((w: number) => number); svgRef?: RefObject<SVGSVGElement>; max?: number; minW?: number; style?: CSSProperties; children: (w: number) => ReactNode }) {
+export function SvgBox({ h, svgRef, children, max, style, minW = 0 }: { h: number | ((w: number) => number); svgRef?: RefObject<SVGSVGElement | null>; max?: number; minW?: number; style?: CSSProperties; children: (w: number) => ReactNode }) {
   const [box, width] = useSize<HTMLDivElement>(640)
   const own = useRef<SVGSVGElement>(null)
   const ref = (svgRef ?? own) as RefObject<SVGSVGElement>

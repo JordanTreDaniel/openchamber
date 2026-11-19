@@ -124,6 +124,16 @@ How long OpenChamber reuses a managed OpenCode health-probe result, including a 
 
 Path to the `opencode` executable OpenChamber should run.
 
+OpenChamber requires OpenCode **2.2.4 or newer**. Check the binary on your `PATH` with `opencode --version`; if the answer is older, set this variable to a newer executable. On a machine whose `PATH` `opencode` is older, setting it is the fix, not an option.
+
+The server prints the file and version it resolved at startup:
+
+```
+[OpenCode] binary=/Users/you/.opencode/bin/opencode source=path version=2.2.5 (minimum 2.2.4; override with OPENCODE_BINARY=/path/to/opencode)
+```
+
+If that version is below the minimum — or no version can be read from it at all — the server prints what it found and keeps running. The browser then shows a blocking **OpenCode v2 required** screen that names the binary and keeps **Check again** for after you fix the file; a version that is merely too old also gets an **Update to OpenCode v2** button. The remedy is on that screen, so the server has to stay up to serve it. With an external server (`OPENCODE_PORT` / `OPENCODE_HOST` / `OPENCODE_SKIP_START`) it is quieter: the server warns that the binary is external and unversioned, keeps running, and `vq` page rendering with the `openchamber_render` tool stays off — so a `vq` block an assistant writes never renders.
+
 ### `OPENCODE_CONFIG`
 
 Path to a specific OpenCode config file.

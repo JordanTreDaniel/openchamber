@@ -79,6 +79,7 @@ export const dict: Record<I18nKey, string> = {
   "opencodeCompatibility.outdatedExternal": "接続先のサーバーは OpenCode {version} を使用しています。OpenCode {minimum} 以降に更新してから再接続してください。",
   "opencodeCompatibility.update": "OpenCode を更新",
   "opencodeCompatibility.local": "OpenCode {version} がインストールされています。このバージョンの OpenChamber には OpenCode v2 が必要です。",
+  "opencodeCompatibility.unavailableLocal": "OpenChamber は {path} のバイナリから OpenCode のバージョンを読み取れませんでした。このバージョンの OpenChamber には OpenCode {minimum} 以降が必要です。`opencode --version` を実行してそのファイルを確認するか、OPENCODE_BINARY に新しいバージョンのパスを指定して、再確認してください。",
   "opencodeCompatibility.external": "接続先のサーバーは OpenCode {version} を使用しています。そのサーバーに OpenCode v2 をインストールしてから再接続してください。",
   "opencodeCompatibility.installDescription": "OpenChamber が公式インストーラーで v2 をインストールし、OpenCode を再起動します。",
   "opencodeCompatibility.install": "OpenCode v2 に更新",

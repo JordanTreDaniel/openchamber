@@ -79,6 +79,7 @@ export const dict: Record<I18nKey, string> = {
   "opencodeCompatibility.outdatedExternal": "連線的伺服器正在執行 OpenCode {version}。請將其更新至 OpenCode {minimum} 或更新版本，然後重新連線。",
   "opencodeCompatibility.update": "更新 OpenCode",
   "opencodeCompatibility.local": "已安裝 OpenCode {version}。此版本的 OpenChamber 需要 OpenCode v2。",
+  "opencodeCompatibility.unavailableLocal": "OpenChamber 無法從 {path} 的二進位檔讀取 OpenCode 版本。此版本的 OpenChamber 需要 OpenCode {minimum} 或更新版本。執行 `opencode --version` 查看該檔案是什麼，或將 OPENCODE_BINARY 設為較新版本的路徑，然後重新檢查。",
   "opencodeCompatibility.external": "連線的伺服器正在執行 OpenCode {version}。請在該伺服器上安裝 OpenCode v2，然後重新連線。",
   "opencodeCompatibility.installDescription": "OpenChamber 將使用官方安裝程式安裝 v2，然後重新啟動 OpenCode。",
   "opencodeCompatibility.install": "更新至 OpenCode v2",

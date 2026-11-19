@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Answer } from 'vq-react';
-import { buildVqAnswerPayload, summarizeVqAnswer } from './answer';
+import { buildVqAnswerPayload, readVqAnswer, summarizeVqAnswer } from './answer';
 import { uiBlockAnswerRecord } from '@/components/chat/uiBlocks/answer';
 
 const answer = (overrides: Partial<Answer>): Answer => ({
@@ -49,4 +49,30 @@ test('the payload passes the block answer schema', () => {
   expect(payload.picks[0]?.button).toBe('2 kept, 1 dropped');
   expect(payload.skipped).toEqual([]);
   expect(JSON.parse(payload.values['calls-2026-11-11'] as string).type).toBe('assign');
+});
+
+test('a deck answer reads back as the answer that was sent', () => {
+  const original = answer({ value: { a: ['keep'], b: ['keep'], c: ['drop'] } });
+  const sent = buildVqAnswerPayload('calls-2026-11-11', original);
+  const record = uiBlockAnswerRecord.safeParse({ messageId: 'm1', block: 'k1', answer: sent });
+  if (!record.success) throw new Error('the payload must pass the block answer schema');
+
+  // What the block gets after a reload is the record's own values, no other hop.
+  expect(readVqAnswer(record.data.answer.values, 'calls-2026-11-11')).toEqual(original);
+  // The restored value is what the component is initialised with, so the deck
+  // shows its own progress instead of starting over.
+  expect(readVqAnswer(record.data.answer.values, 'calls-2026-11-11')?.value).toEqual({ a: ['keep'], b: ['keep'], c: ['drop'] });
+});
+
+test('a value that is not this fence answer reads as nothing', () => {
+  expect(readVqAnswer(undefined, 'calls')).toBeNull();
+  // Another block in the same message: the key is not there.
+  expect(readVqAnswer({ other: '{"v":1}' }, 'calls')).toBeNull();
+  // A block field holds a list of strings; JSON is a string.
+  expect(readVqAnswer({ calls: ['a', 'b'] }, 'calls')).toBeNull();
+  expect(readVqAnswer({ calls: 'not json' }, 'calls')).toBeNull();
+  expect(readVqAnswer({ calls: '' }, 'calls')).toBeNull();
+  expect(readVqAnswer({ calls: '"a string"' }, 'calls')).toBeNull();
+  expect(readVqAnswer({ calls: '[]' }, 'calls')).toBeNull();
+  expect(readVqAnswer({ calls: 'null' }, 'calls')).toBeNull();
 });

@@ -78,6 +78,7 @@ export const dict = {
   "opencodeCompatibility.outdatedExternal": "Le serveur connecté utilise OpenCode {version}. Mettez-le à jour vers OpenCode {minimum} ou une version plus récente, puis reconnectez-vous.",
   "opencodeCompatibility.update": "Mettre à jour OpenCode",
   "opencodeCompatibility.local": "OpenCode {version} est installé. Cette version d’OpenChamber nécessite OpenCode v2.",
+  "opencodeCompatibility.unavailableLocal": "OpenChamber n’a pas pu lire de version d’OpenCode dans le binaire situé à {path}. Cette version d’OpenChamber exige OpenCode {minimum} ou plus récent. Lancez `opencode --version` pour voir ce qu’est ce fichier, ou définissez OPENCODE_BINARY sur le chemin d’une version plus récente, puis vérifiez à nouveau.",
   "opencodeCompatibility.external": "Le serveur connecté utilise OpenCode {version}. Installez OpenCode v2 sur ce serveur, puis reconnectez-vous.",
   "opencodeCompatibility.installDescription": "OpenChamber installera la v2 avec le programme officiel, puis redémarrera OpenCode.",
   "opencodeCompatibility.install": "Passer à OpenCode v2",

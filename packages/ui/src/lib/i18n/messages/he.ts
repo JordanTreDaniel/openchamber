@@ -78,6 +78,7 @@ export const dict = {
   'opencodeCompatibility.outdatedExternal': 'השרת המחובר מריץ OpenCode {version}. יש לעדכן אותו ל-OpenCode {minimum} ומעלה ואז להתחבר מחדש.',
   'opencodeCompatibility.update': 'עדכן את OpenCode',
   'opencodeCompatibility.local': 'מותקן OpenCode {version}. גרסה זו של OpenChamber דורשת OpenCode v2.',
+  'opencodeCompatibility.unavailableLocal': 'OpenChamber לא הצליח לקרוא גרסת OpenCode מהקובץ ב-{path}. גרסה זו של OpenChamber דורשת OpenCode {minimum} או חדש יותר. הרץ `opencode --version` כדי לראות מהו הקובץ הזה, או הגדר את OPENCODE_BINARY לנתיב של גרסה חדשה יותר, ובדוק שוב.',
   'opencodeCompatibility.external': 'השרת המחובר מריץ OpenCode {version}. יש להתקין OpenCode v2 בשרת הזה ואז להתחבר מחדש.',
   'opencodeCompatibility.installDescription': 'OpenChamber יתקין את v2 באמצעות תוכנית ההתקנה הרשמית ואז יפעיל מחדש את OpenCode.',
   'opencodeCompatibility.install': 'עדכן ל-OpenCode v2',
