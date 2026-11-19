@@ -11,6 +11,8 @@ const originalFetch = globalThis.fetch;
 
 interface Call {
   path: string;
+  /** The query string as it went out; the upload's `overwrite` travels here. */
+  search: string;
   method: string;
   body: unknown;
   headers: Headers;
@@ -29,6 +31,7 @@ const stubFetch = (
   const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body;
   calls.push({
     path: url.pathname,
+    search: url.search,
     method: String(init?.method ?? 'GET'),
     body,
     headers: new Headers(init?.headers),
@@ -182,6 +185,69 @@ describe('writeVqFiles', () => {
     expect(result.errors).toEqual(['answer.json: HTTP 401']);
   });
 
+  test('a 2xx that is not the route’s own JSON is not a write', async () => {
+    // A proxy, an auth page or the SPA fallback answers 200 with HTML; `ok`
+    // alone called that a clean write that never happened.
+    const calls: Call[] = [];
+    globalThis.fetch = stubFetch(calls, (_path, body) => (
+      (body as { path?: string } | undefined)?.path?.endsWith('notes.md')
+        ? new Response('<!doctype html><title>sign in</title>', { status: 200, headers: { 'Content-Type': 'text/html' } })
+        : Response.json({ success: true })
+    ));
+
+    const result = await writeVqFiles(textFiles(['answer.json', 'notes.md', 'meta.json']), destination, WORKSPACE);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(['notes.md: unexpected response (HTTP 200, non-JSON body)']);
+    // The rest of the answer still goes, and its receipt names the miss.
+    expect(calls.map((call) => (call.body as { path: string }).path)).toEqual([
+      `${FOLDER}/notes.md`,
+      `${FOLDER}/meta.json`,
+      `${FOLDER}/answer.json`,
+    ]);
+    expect(answerEnvelope(calls).output).toEqual({
+      ok: false,
+      location: FOLDER,
+      errors: ['notes.md: unexpected response (HTTP 200, non-JSON body)'],
+    });
+  });
+
+  test('a 2xx JSON body that does not confirm success is not a write', async () => {
+    const calls: Call[] = [];
+    globalThis.fetch = stubFetch(calls, () => Response.json({ success: false }));
+
+    const result = await writeVqFiles(textFiles(['answer.json']), destination, WORKSPACE);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(['answer.json: unexpected response (HTTP 200, success not confirmed)']);
+  });
+
+  test('a file name that leaves its folder is refused, and the rest still go', async () => {
+    // The name comes from the spec, so a separator or a `..` segment is a name
+    // that would put the file beside the answer's folder or outside it.
+    const calls: Call[] = [];
+    globalThis.fetch = recordingFetch(calls);
+
+    const files: OutputFile[] = [
+      ...textFiles(['answer.json', 'safe.md']),
+      { name: '../x.json', data: '{}', mime: 'application/json' },
+      { name: 'a/b.json', data: '{}', mime: 'application/json' },
+    ];
+
+    const result = await writeVqFiles(files, destination, WORKSPACE);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([
+      '../x.json: invalid file name',
+      'a/b.json: invalid file name',
+    ]);
+    // Neither bad name reached the route, and the good files are untouched.
+    expect(calls.map((call) => (call.body as { path: string }).path)).toEqual([
+      `${FOLDER}/safe.md`,
+      `${FOLDER}/answer.json`,
+    ]);
+  });
+
   test('a network failure is reported per file and the loop continues', async () => {
     let attempt = 0;
     globalThis.fetch = (async () => {
@@ -231,6 +297,11 @@ describe('writeVqFiles', () => {
     expect(upload.headers.get('Content-Type')).toBe('application/octet-stream');
     expect(upload.headers.get('x-opencode-directory')).toBe(WORKSPACE);
     expect(upload.body).toBeInstanceOf(Blob);
+    // `overwrite=true` is the difference between a re-answer and a 409 on every
+    // fence answered twice, so it is asserted, not assumed.
+    const uploadQuery = new URLSearchParams(upload.search);
+    expect(uploadQuery.get('path')).toBe(`${FOLDER}/recording.webm`);
+    expect(uploadQuery.get('overwrite')).toBe('true');
     // The answer still lands last, after the byte file, and reports the folder.
     expect((calls[2].body as { path: string }).path).toBe(`${FOLDER}/answer.json`);
     expect(answerEnvelope(calls).output).toEqual({ ok: true, location: FOLDER });

@@ -77,6 +77,27 @@ const refusalReason = async (response: Response): Promise<string> => {
   return reason || `HTTP ${response.status}`;
 };
 
+/**
+ * The reason a 2xx is not a write, or the null answer when it is one.
+ *
+ * `response.ok` alone is not proof: a proxy, an auth page or the SPA fallback
+ * answers 200 with HTML, and the old check recorded that as a clean write that
+ * never happened. Every route this writer uses ends on the same receipt —
+ * `res.json({ success: true, path })` at routes.js:1563 and :1578 (fs/write),
+ * :865 (fs/mkdir) and :1690 (fs/upload) — so success is that field, and
+ * nothing in front of the route can invent it.
+ */
+const unexpectedResponse = async (response: Response): Promise<string | null> => {
+  const parsed = await response.json().then(
+    (body: unknown) => ({ json: true, body }),
+    () => ({ json: false, body: null }),
+  );
+  if (!parsed.json) return `unexpected response (HTTP ${response.status}, non-JSON body)`;
+  const body = parsed.body;
+  const confirmed = typeof body === 'object' && body !== null && (body as { success?: unknown }).success === true;
+  return confirmed ? null : `unexpected response (HTTP ${response.status}, success not confirmed)`;
+};
+
 /** One text file; the null answer means it is on the disk. */
 async function writeTextFile(path: string, content: string, workspace: string | null): Promise<string | null> {
   try {
@@ -85,7 +106,8 @@ async function writeTextFile(path: string, content: string, workspace: string | 
       headers: requestHeaders(JSON_TYPE, workspace),
       body: JSON.stringify({ path, content }),
     });
-    return response.ok ? null : await refusalReason(response);
+    if (!response.ok) return await refusalReason(response);
+    return await unexpectedResponse(response);
   } catch (error) {
     return messageOf(error);
   }
@@ -103,7 +125,8 @@ async function ensureFolder(path: string, workspace: string | null): Promise<str
       headers: requestHeaders(JSON_TYPE, workspace),
       body: JSON.stringify({ path }),
     });
-    return response.ok ? null : await refusalReason(response);
+    if (!response.ok) return await refusalReason(response);
+    return await unexpectedResponse(response);
   } catch (error) {
     return messageOf(error);
   }
@@ -118,7 +141,8 @@ async function writeBytesFile(path: string, data: Blob, workspace: string | null
       headers: requestHeaders(BYTES_TYPE, workspace),
       body: data,
     });
-    return response.ok ? null : await refusalReason(response);
+    if (!response.ok) return await refusalReason(response);
+    return await unexpectedResponse(response);
   } catch (error) {
     return messageOf(error);
   }
@@ -130,6 +154,20 @@ const isBlob = (data: OutputFile['data'] | undefined): data is Blob => typeof Bl
 const ANSWER_FILE = 'answer.json';
 
 const nameOf = (file: OutputFile | undefined): string => (typeof file?.name === 'string' ? file.name.trim() : '');
+
+/**
+ * Whether a name is one path segment, as the folder contract means it.
+ *
+ * The name comes from the fence's spec, so it is untrusted: a separator would
+ * let a file land in a folder beside the answer's, and a `..` segment would let
+ * it leave that folder entirely. The workspace check on the server stops the
+ * real damage, but the answer's own folder would no longer hold the answer. A
+ * bad name is refused, never rewritten — a silently renamed file is a file the
+ * reader cannot find.
+ */
+const isLeafName = (name: string): boolean => (
+  name !== '' && name !== '.' && name !== '..' && !/[/\\]/.test(name) && !name.split(/[/\\]/).includes('..')
+);
 
 /** What the answer's file carries about its own write: the library's `OutputRef` shape. */
 interface OutputReceipt {
@@ -202,7 +240,11 @@ export async function writeVqFiles(
         errors.push('(unnamed file): the answer named no file name.');
         return;
       }
-      const path = `${folder}/${name.replace(/^[/\\]+/, '')}`;
+      if (!isLeafName(name)) {
+        errors.push(`${name}: invalid file name`);
+        return;
+      }
+      const path = `${folder}/${name}`;
       const data = file.data;
       const failure = isBlob(data)
         ? folderFailure ?? await writeBytesFile(path, data, workspace)
@@ -227,6 +269,10 @@ export async function writeVqFiles(
       if (typeof answer.data !== 'string') {
         receiptFailure = `the answer carries ${typeof answer.data}, not text`;
       } else {
+        // The receipt goes on the envelope root, not on `answers[0]`: the
+        // library already writes `output` onto the answer object it hands to
+        // `onAnswer`, but it serialises `answer.json` before that write, so the
+        // file — not the payload — is what has to carry the receipt.
         const receipt = withReceipt(answer.data, location, errors.length === 0, errors);
         if ('text' in receipt) prepared = receipt.text;
         else receiptFailure = receipt.reason;
