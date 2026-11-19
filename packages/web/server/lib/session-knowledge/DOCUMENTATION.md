@@ -31,7 +31,7 @@ source:
 |---|---|
 | `openchamber.pinned` | pinned notes and plan bodies |
 | `openchamber.memory` | the memory index and when to save |
-| `openchamber.guidance` | when to link, when to draw a page, where the tools are called |
+| `openchamber.guidance` | when to link, when to draw a page or a vq block, where the tools are called |
 | `openchamber.checkout` | the directory and branch the session works on |
 | `openchamber.response-style` | the user's current response style |
 | `openchamber.extensions` | what active extensions add: their UI block components and their instructions (`../guests/agent-context.js`) |
@@ -177,6 +177,21 @@ options; the tool description repeats none of it. Data and structure go to
 blocks because they look the same whatever model writes them, while a page's
 look depends on the model writing good HTML. It goes into `openchamber.guidance`, so a
 change to the text reaches running sessions on their next message.
+
+## When the answer is a judgment over many items
+
+A session with `openchamber_render` is also told that a ```` ```vq ```` fence
+exists (`VQ_GUIDANCE`, hand-written in `vq-guidance.js`). Nothing else did: the
+block guidance describes `openui-lang` only, so an agent asked to triage a call
+list wrote the verdicts out as prose, or pasted the rows into a block.
+The text carries the object's keys, the `source` pointer that names a JSON file
+on disk (the agent passes a pointer, never the rows), and the order of the four
+ask surfaces: `vq` for judgment over data already on disk, `openui-lang` for
+showing something and choosing among a few options, `openchamber_render` for a
+decision that sets the direction of the work, the question tool for a quick
+clarification. It holds one example and no component catalog, since `source`
+supplies `items`, `options` and `rows`. Gated on the same flag as the blocks, so
+a session without the render tool is told neither.
 
 ## Commands the user runs
 

@@ -15,6 +15,7 @@
  */
 import { isRecord } from '../shared/guards.js';
 import { UI_BLOCKS_GUIDANCE } from './ui-blocks-guidance.js';
+import { VQ_GUIDANCE } from './vq-guidance.js';
 
 const PINS_METADATA_KEY = 'project_context_pins';
 
@@ -276,6 +277,7 @@ const buildGuidance = ({ linking, naming, rendering, secrets, workflows }) => {
     linking ? SESSION_LINK_GUIDANCE : '',
     linking && naming ? WORK_NAME_GUIDANCE : '',
     rendering ? UI_BLOCKS_GUIDANCE : '',
+    rendering ? VQ_GUIDANCE : '',
     rendering ? RENDER_PAGE_GUIDANCE : '',
     rendering ? REPLY_COMMAND_GUIDANCE : '',
     secrets ? SECRET_REQUEST_GUIDANCE : '',
