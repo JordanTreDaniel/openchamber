@@ -37,8 +37,9 @@ test('maps records onto items, eliding the empty half of a detail', async () => 
   expect(resolved.prop).toBe('items');
   expect(resolved.data).toEqual([
     { id: 'id-1', label: 'Victoria Abshire', detail: 'Executive Recruiter · Talance Group' },
-    // A blank title and a null id fall back to the firm and the record's index.
-    { id: '1', label: 'ProFound Staffing', detail: 'ProFound Staffing' },
+    // A blank title and a null id fall back to the firm and the record's index;
+    // the detail would repeat the label, so it is dropped.
+    { id: '1', label: 'ProFound Staffing' },
     // The second id-1 would merge two cards; the later record keeps both apart.
     { id: 'id-1#2', label: 'Ann Lee', detail: 'Harnham' },
   ]);
@@ -65,6 +66,26 @@ test('where filters before the limit, by equality and by prefix', async () => {
   expect(prefix.data).toHaveLength(2);
   const caret = await loadVqSource('assign', { ...base, where: { segment: '^recr' }, limit: 1 });
   expect(caret.data).toHaveLength(1);
+});
+
+test('a detail that repeats the label is dropped', async () => {
+  serve({
+    rows: [
+      // No name and no title: the label falls back to the firm, which is also
+      // the only thing the detail template has to say.
+      { name: '', title: '', firm: 'Motion Recruitment' },
+      // A named contact still gets the detail: it adds the title and the firm.
+      { name: 'Ann Lee', title: 'Partner', firm: 'Harnham' },
+    ],
+  });
+  const resolved = await loadVqSource('assign', { path: PATH, select: 'rows', fields: { label: 'name', detail: '{title} · {firm}' } });
+  expect(resolved.data).toEqual([
+    { id: '0', label: 'Motion Recruitment' },
+    { id: '1', label: 'Ann Lee', detail: 'Partner · Harnham' },
+  ]);
+  // A table's cells get the same treatment: an empty cell beats the same word twice.
+  const table = await loadVqSource('table', { path: PATH, select: 'rows', fields: { label: 'name', detail: '{title} · {firm}' } });
+  expect((table.data[0] as { cells: Record<string, string> }).cells).toEqual({ label: 'Motion Recruitment' });
 });
 
 test('the label never comes out empty', async () => {

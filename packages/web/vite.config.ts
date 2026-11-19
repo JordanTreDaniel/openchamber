@@ -14,12 +14,13 @@ const reactScanToggle = (process.env.VITE_ENABLE_REACT_SCAN ?? '').toLowerCase()
 const enableReactScan = reactScanToggle === '1' || reactScanToggle === 'true' || reactScanToggle === 'on' || reactScanToggle === 'yes';
 const themeDirectory = path.resolve(__dirname, '../ui/src/lib/theme/themes');
 
-// Out-of-tree component library used by the dev-only mount proof
-// (packages/ui/src/components/dev/VqMountPanel.tsx). It ships raw TypeScript
+// Component library used by the dev-only mount proof
+// (packages/ui/src/components/dev/VqMountPanel.tsx). It is vendored into this
+// workspace at packages/vq (see packages/vq/SYNC.md) and ships raw TypeScript
 // with no build output, so it is consumed as source: aliased here, declared for
 // the compiler in packages/ui/src/types/vq-react.d.ts, and allowed through the
 // dev server's fs guard.
-const vqReactRoot = path.resolve(__dirname, '../../../../vq-react 2');
+const vqReactRoot = path.resolve(__dirname, '../vq/src');
 
 const reactBabel = { plugins: ['babel-plugin-react-compiler'] };
 
@@ -99,11 +100,11 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    // vq-react declares react/react-dom 18 as real dependencies, so a bare
-    // import from its sources would resolve to the nested copy and produce a
-    // second React ("Invalid hook call"). Dedupe pins every `react` /
-    // `react-dom` import — including subpaths like `react/jsx-runtime` — to the
-    // host copies.
+    // Defence-in-depth for any transitive `react` / `react-dom` copy reached
+    // from the sources (vq-react itself declares neither). Dedupe pins every
+    // `react` / `react-dom` import — including subpaths like
+    // `react/jsx-runtime` — to the host copies, so a second React ("Invalid
+    // hook call") is impossible even if a dependency starts declaring one.
     dedupe: ['react', 'react-dom'],
     alias: [
       { find: '@openchamber/sdk/schemas', replacement: path.resolve(__dirname, '../sdk/src/schemas.ts') },
@@ -111,7 +112,7 @@ export default defineConfig({
       { find: '@openchamber/ui', replacement: path.resolve(__dirname, '../ui/src') },
       { find: '@web', replacement: path.resolve(__dirname, './src') },
       { find: '@', replacement: path.resolve(__dirname, '../ui/src') },
-      { find: 'vq-react', replacement: path.resolve(vqReactRoot, 'src/index.ts') },
+      { find: 'vq-react', replacement: path.resolve(vqReactRoot, 'index.ts') },
     ],
   },
   worker: {
@@ -128,9 +129,10 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: {
-      // The workspace root is the default; vq-react lives beside the checkout,
-      // so its raw sources must be allowed explicitly or /@fs/ requests 403.
-      allow: [searchForWorkspaceRoot(__dirname), path.resolve(vqReactRoot, 'src')],
+      // The vendored sources live inside the workspace, so
+      // searchForWorkspaceRoot already covers them; vqReactRoot is kept as
+      // belt-and-braces in case the workspace root is ever narrowed.
+      allow: [searchForWorkspaceRoot(__dirname), vqReactRoot],
     },
     proxy: {
       '/auth': {

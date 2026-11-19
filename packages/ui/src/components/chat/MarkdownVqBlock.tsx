@@ -9,7 +9,7 @@ import {
   type VqSourceSpec,
 } from '@/lib/vq/source';
 import { buildVqAnswerPayload, vqAnswerText } from '@/lib/vq/answer';
-import { installVqWriter } from '@/lib/vq/writer';
+import { installVqWriter, useVqWriteResult } from '@/lib/vq/writer';
 import { uiBlockKey } from './uiBlocks/answer';
 import { useMarkdownPresentation } from './markdown/MarkdownPresentationContext';
 
@@ -62,6 +62,12 @@ function loadVqRuntime(): Promise<VqRuntime> {
 }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/** The writer's first reason, short enough for one muted line. */
+const writeFailure = (errors: string[] | undefined): string => {
+  const reason = (errors ?? []).find((entry) => entry.trim()) ?? 'no reason given';
+  return reason.length > 140 ? `${reason.slice(0, 137)}…` : reason;
+};
 
 const VqCode = ({ code }: { code: string }) => <pre dir="ltr"><code>{code}</code></pre>;
 
@@ -229,6 +235,15 @@ function VqSpec({ spec, code }: { spec: Record<string, unknown>; code: string })
     return built;
   }, [state, source, spec]);
 
+  // Where this fence's files were meant to go. The writer keeps each folder's
+  // last write, so a failure shows here instead of a clean "Answered" that
+  // claims files which never reached the disk.
+  const outputFolder = React.useMemo(() => {
+    const output = spec.output as { path?: unknown } | undefined;
+    return typeof output?.path === 'string' && output.path.trim() ? output.path.trim() : undefined;
+  }, [spec]);
+  const writeResult = useVqWriteResult(outputFolder);
+
   if (state.kind === 'failed') return <VqFallback code={code} note={state.message} />;
   if (runtimeError) return <VqFallback code={code} note={runtimeError} />;
   if (state.kind === 'loading') return <p dir="ltr" className="text-xs text-muted-foreground break-all">vq: loading {state.path}</p>;
@@ -250,6 +265,9 @@ function VqSpec({ spec, code }: { spec: Record<string, unknown>; code: string })
         </VqFenceBoundary>
       )}
       {answered !== null && <p className="mt-1 text-xs text-muted-foreground">Answered · {answered}</p>}
+      {answered !== null && writeResult?.ok === false && (
+        <p className="mt-1 text-xs text-muted-foreground">output not written — {writeFailure(writeResult.errors)}</p>
+      )}
       {sendError !== null && <p className="mt-1 text-xs text-muted-foreground">{sendError}</p>}
     </div>
   );

@@ -11,6 +11,7 @@
  * `attachOutput` returns the answer either way, and this never throws.
  */
 
+import { useSyncExternalStore } from 'react';
 import { normalizePath } from '@/lib/pathNormalization';
 import { opencodeClient } from '@/lib/opencode/client';
 import { runtimeFetch } from '@/lib/runtime-fetch';
@@ -205,6 +206,46 @@ function withReceipt(
 }
 
 /**
+ * The last write per answer folder, keyed as the library resolved it
+ * (`<spec path>/<answer id>`, see `destinationFor`). The library swallows the
+ * result into the answer's envelope, which the fence never sees, so the fence
+ * reads the write back from here instead of believing its own "Answered".
+ */
+const writeResults = new Map<string, WriteResult>();
+const writeListeners = new Set<() => void>();
+
+/**
+ * The newest write under `folderPath` — the path a fence named in its spec,
+ * which is a prefix of the library's key. Null when nothing was written there;
+ * a success is returned as it is, because only a failure earns a line.
+ */
+export function getVqWriteResult(folderPath?: string): WriteResult | null {
+  const key = typeof folderPath === 'string' ? folderPath.trim().replace(/[\\/]+$/, '') : '';
+  if (!key) return null;
+  let found: WriteResult | null = null;
+  for (const [written, result] of writeResults) {
+    if (written === key || written.startsWith(`${key}/`)) found = result;
+  }
+  return found;
+}
+
+const subscribeVqWriteResults = (listener: () => void): (() => void) => {
+  writeListeners.add(listener);
+  return () => {
+    writeListeners.delete(listener);
+  };
+};
+
+/** The folder's write as state: a fence re-renders when its write lands. */
+export function useVqWriteResult(folderPath?: string): WriteResult | null {
+  return useSyncExternalStore(
+    subscribeVqWriteResults,
+    () => getVqWriteResult(folderPath),
+    () => getVqWriteResult(folderPath),
+  );
+}
+
+/**
  * Writes one answer's files into its folder, one at a time: a failed file is
  * recorded and the rest still go.
  *
@@ -214,10 +255,10 @@ function withReceipt(
  *
  * `workspace` is spelled out for the tests; a real call reads the open folder.
  */
-export async function writeVqFiles(
+async function writeVqFilesOnly(
   files: OutputFile[],
   dest: Destination,
-  workspace: string | null = workspaceDirectory(),
+  workspace: string | null,
 ): Promise<WriteResult> {
   const location = typeof dest?.path === 'string' ? dest.path.trim() : '';
   if (!location) return { ok: false, location: '', errors: ['No destination path in the output spec.'] };
@@ -286,6 +327,24 @@ export async function writeVqFiles(
   }
 
   return errors.length > 0 ? { ok: false, location, errors } : { ok: true, location };
+}
+
+/**
+ * `writeVqFilesOnly`, with the result kept for the fence that asked: the result
+ * goes back to the library only, and the fence has no other way to learn it.
+ */
+export async function writeVqFiles(
+  files: OutputFile[],
+  dest: Destination,
+  workspace: string | null = workspaceDirectory(),
+): Promise<WriteResult> {
+  const result = await writeVqFilesOnly(files, dest, workspace);
+  const key = typeof dest?.path === 'string' ? dest.path.trim() : '';
+  if (key) {
+    writeResults.set(key, result);
+    for (const listener of writeListeners) listener();
+  }
+  return result;
 }
 
 const writer: Writer = { write: (files, dest) => writeVqFiles(files, dest) };

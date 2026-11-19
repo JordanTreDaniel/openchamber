@@ -361,6 +361,13 @@
         "vite": "^7.3.2",
       },
     },
+    "packages/vq": {
+      "name": "@openchamber/vq-react",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^3.23.8",
+      },
+    },
     "packages/vscode": {
       "name": "openchamber",
       "version": "2.7.0",
@@ -1194,6 +1201,8 @@
     "@openchamber/sdk": ["@openchamber/sdk@workspace:packages/sdk"],
 
     "@openchamber/ui": ["@openchamber/ui@workspace:packages/ui"],
+
+    "@openchamber/vq-react": ["@openchamber/vq-react@workspace:packages/vq"],
 
     "@openchamber/web": ["@openchamber/web@workspace:packages/web"],
 
@@ -3578,6 +3587,8 @@
     "@malept/flatpak-bundler/fs-extra": ["fs-extra@9.1.0", "", { "dependencies": { "at-least-node": "^1.0.0", "graceful-fs": "^4.2.0", "jsonfile": "^6.0.1", "universalify": "^2.0.0" } }, "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ=="],
 
     "@npmcli/agent/lru-cache": ["lru-cache@10.4.3", "", {}, "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="],
+
+    "@openchamber/vq-react/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "@pierre/diffs/@pierre/highlights": ["@pierre/highlights@0.3.0", "", {}, "sha512-s6xZ/giPPrSeCO2w254GiysUXD4ditKMTOrl1vHynvPqP7VdlujYi01O9joxJ0T16XkoXGQMN6zkRi9+O8NCzg=="],
 

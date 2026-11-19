@@ -1,15 +1,18 @@
-// Types for the out-of-tree vq-react component library.
+// Types for the vq-react component library.
 //
-// The library ships raw TypeScript from a directory beside this checkout and is
-// consumed at build time through the Vite alias in packages/web/vite.config.ts,
-// so `tsc -b` can see it — but packages/ui/tsconfig.build.json is a composite
+// The library ships raw TypeScript, vendored into this workspace at
+// packages/vq/src (see packages/vq/SYNC.md) and consumed at build time through
+// the Vite alias in packages/web/vite.config.ts. It is declared here rather
+// than imported directly because packages/ui/tsconfig.build.json is a composite
 // project with `rootDir: ".."`, which rejects any source file outside
-// `packages/` (TS6059/TS6307, ~64 errors for three imported symbols).
+// `packages/` (TS6059/TS6307, ~64 errors for three imported symbols) — and
+// because the vendored package is named @openchamber/vq-react, so the `vq-react`
+// specifier stays resolvable from this ambient declaration.
 //
 // Declaring the surface here keeps the project reference build whole and keeps
 // the panel type-checked against a contract, instead of silencing the import.
 // The runtime shape is defined by the library itself:
-// VQ.tsx, tokens.ts, types.ts and output.ts in the library's own src/ directory.
+// VQ.tsx, tokens.ts, types.ts and output.ts in packages/vq/src.
 declare module 'vq-react' {
   import type * as React from 'react';
   /** Every visual value is a CSS variable reference so hosts can retheme. */

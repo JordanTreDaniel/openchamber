@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { Destination, OutputFile } from 'vq-react';
-import { resolveVqOutputPath, writeVqFiles } from './writer';
+import { getVqWriteResult, resolveVqOutputPath, writeVqFiles } from './writer';
 
 /**
  * The writer's side of an answer: one request per file through the app's file
@@ -402,5 +402,40 @@ describe('writeVqFiles', () => {
 
     expect(result.errors).toEqual(['recording.webm: Path is outside of active workspace']);
     expect(calls.some((call) => call.path === '/api/fs/upload')).toBe(false);
+  });
+});
+
+describe('getVqWriteResult', () => {
+  test('a failed write is retrievable by the folder the fence named', async () => {
+    const calls: Call[] = [];
+    globalThis.fetch = stubFetch(calls, () => Response.json({ error: 'Path is outside of active workspace' }, { status: 400 }));
+    // The library's own key: `destinationFor` joins the spec path and the answer id.
+    const parent = '/repo/vq-out/cards';
+    const folder = `${parent}/card-2026-11-11`;
+
+    await writeVqFiles(textFiles(['answer.json']), { kind: 'dir', path: folder }, WORKSPACE);
+
+    // The fence knows only the spec path, so the failure must be found under the
+    // folder it named — else it shows a clean "Answered" for files that never landed.
+    expect(getVqWriteResult(parent)).toEqual({
+      ok: false,
+      location: folder,
+      errors: ['answer.json: Path is outside of active workspace'],
+    });
+    expect(getVqWriteResult(`${parent}/`)?.ok).toBe(false);
+    // A sibling whose name only shares the letters is not that folder.
+    expect(getVqWriteResult('/repo/vq-out/card')).toBeNull();
+    expect(getVqWriteResult('')).toBeNull();
+    expect(getVqWriteResult()).toBeNull();
+  });
+
+  test('a clean write is kept as a success, not as a failure', async () => {
+    const calls: Call[] = [];
+    globalThis.fetch = recordingFetch(calls);
+    const folder = `${FOLDER}/clean`;
+
+    await writeVqFiles(textFiles(['answer.json', 'notes.md']), { kind: 'dir', path: folder }, WORKSPACE);
+
+    expect(getVqWriteResult(folder)).toEqual({ ok: true, location: folder });
   });
 });

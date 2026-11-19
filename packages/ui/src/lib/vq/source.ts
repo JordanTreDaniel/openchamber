@@ -134,6 +134,16 @@ const recordDetail = (record: unknown, template: string | undefined): string => 
   return filled.split('·').map((part) => part.trim()).filter(Boolean).join(' · ');
 };
 
+/**
+ * The detail line, unless it would only repeat the label. A record with no name
+ * falls back to its firm for the label, so `{title} · {firm}` would then print
+ * the same word twice on one card — which teaches the reader nothing.
+ */
+const recordDetailFor = (record: unknown, template: string | undefined, label: string): string => {
+  const detail = recordDetail(record, template);
+  return detail === label ? '' : detail;
+};
+
 const recordImage = (record: unknown, field: string | undefined): string | undefined => {
   if (!field) return undefined;
   const value = textOf(readPath(record, field)).trim();
@@ -177,11 +187,12 @@ export function vqTableColumns(fields: VqSourceFields): { id: string; label: str
 }
 
 const buildElements = (records: unknown[], source: VqSourceSpec) => records.map((record, index) => {
+  const label = recordLabel(record, source.fields.label, index);
   const element: { id: string; label: string; detail?: string; image?: string } = {
     id: recordId(record, source, index),
-    label: recordLabel(record, source.fields.label, index),
+    label,
   };
-  const detail = recordDetail(record, source.fields.detail);
+  const detail = recordDetailFor(record, source.fields.detail, label);
   if (detail) element.detail = detail;
   const image = recordImage(record, source.fields.image);
   if (image) element.image = image;
@@ -189,8 +200,9 @@ const buildElements = (records: unknown[], source: VqSourceSpec) => records.map(
 });
 
 const buildRows = (records: unknown[], source: VqSourceSpec) => records.map((record, index) => {
-  const cells: Record<string, string> = { label: recordLabel(record, source.fields.label, index) };
-  const detail = recordDetail(record, source.fields.detail);
+  const label = recordLabel(record, source.fields.label, index);
+  const cells: Record<string, string> = { label };
+  const detail = recordDetailFor(record, source.fields.detail, label);
   if (detail) cells.detail = detail;
   const image = recordImage(record, source.fields.image);
   if (image) cells.image = image;
